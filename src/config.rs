@@ -31,7 +31,8 @@ pub struct Config {
     pub default_repo: String,
 
     /// Directories that are never modified during promotion.
-    /// Useful for environment-specific customizations like secret values.
+    /// Useful for environment-specific customizations.
+    /// Recommended: custom, env (for env-specific patches and config)
     #[config_doc(example = "[custom, env, local]")]
     #[serde(default)]
     pub protected_dirs: Vec<String>,
@@ -228,6 +229,26 @@ pub struct GlobalRules {
     /// Version change rules.
     #[serde(default)]
     pub version_rules: VersionRules,
+
+    /// Multi-source promotion options.
+    #[serde(default)]
+    pub promote_options: PromoteOptions,
+}
+
+/// Options for multi-source promotion.
+#[derive(Debug, Deserialize, Clone, Default, ConfigDoc)]
+pub struct PromoteOptions {
+    /// Allow duplicate files across sources.
+    /// When false (default), promotion fails if the same file exists in multiple sources.
+    #[config_doc(default = "false")]
+    #[serde(default)]
+    pub allow_duplicates: bool,
+
+    /// Only promote components that already exist in destination.
+    /// When true, new components from sources are skipped.
+    #[config_doc(default = "false")]
+    #[serde(default)]
+    pub only_existing: bool,
 }
 
 /// Version change rules.
@@ -538,6 +559,7 @@ repos:
 default_repo: gitops
 
 # Directories that are never modified during promotion
+# Recommended: custom (env-specific patches), env (env-specific config)
 protected_dirs:
   - custom
   - env
@@ -622,6 +644,12 @@ rules:
     version_rules:
       allow_downgrade: false
       allow_prerelease: false
+    # Multi-source promotion options
+    promote_options:
+      # Allow duplicate files across sources (default: false = error)
+      allow_duplicates: false
+      # Only promote components that already exist in destination
+      only_existing: false
 "#
         .to_string()
     }

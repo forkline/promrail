@@ -29,6 +29,9 @@ pub enum PromrailError {
     #[error("Source and destination are the same: '{0}'")]
     SameEnvironment(String),
 
+    #[error("Duplicate files found in multiple sources:\n  {}", .0.join("\n  "))]
+    DuplicateFiles(Vec<String>),
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
