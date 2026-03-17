@@ -171,10 +171,14 @@ pub enum VersionsCommands {
         )]
         source_vec: Vec<String>,
 
-        #[arg(short = 'o', long, help = "Output file path")]
+        #[arg(
+            short = 'o',
+            long,
+            help = "Output JSON file path (ignored with --explain)"
+        )]
         output: Option<String>,
 
-        #[arg(long, help = "Show merge decisions and warnings")]
+        #[arg(long, help = "Show human-readable merge summary instead of JSON")]
         explain: bool,
     },
 }
