@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-if ! [ "$(git rev-list --count origin/master..HEAD)" -eq 0 ]; then
+if ! [ "$(git rev-list --count origin/main..HEAD)" -eq 0 ]; then
     echo "There are commits in this branch. Please merge them first."
-    echo "CHANGELOG template needs master commit ID."
+    echo "CHANGELOG template needs main commit ID."
     exit 1
 fi
 
