@@ -12,7 +12,7 @@
 #    - GPG_PRIVATE_KEY: Contents of gpg-private-key.asc
 #
 # Workflow Triggers:
-# - Push to master branch
+# - Push to main branch
 # - Reads version from CHANGELOG.md
 # - Creates signed tag if version changed
 #
@@ -23,7 +23,7 @@ name: Auto tag
 on:
   push:
     branches:
-      - master
+      - main
 
 jobs:
   tag:
