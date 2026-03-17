@@ -3,6 +3,8 @@
 //! Supports two config versions:
 //! - v1: Single repo with multiple environments
 //! - v2: Multiple standalone repos for cross-repo promotion
+//!
+//! Multi-source promotion rules for complex workflows.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -57,6 +59,318 @@ pub struct Config {
     /// Audit logging settings.
     #[serde(default)]
     pub audit: AuditConfig,
+
+    /// Multi-source promotion rules for complex workflows.
+    #[serde(default)]
+    pub rules: PromotionRules,
+}
+
+/// Promotion rules for multi-source workflows.
+#[derive(Debug, Deserialize, Clone, Default, ConfigDoc)]
+pub struct PromotionRules {
+    /// Source definitions with priorities and filters.
+    #[serde(default)]
+    pub sources: HashMap<String, SourceRule>,
+
+    /// Conflict resolution strategies.
+    #[serde(default)]
+    pub conflict_resolution: ConflictResolution,
+
+    /// Component-level rules.
+    #[serde(default)]
+    pub components: HashMap<String, ComponentRule>,
+
+    /// Global rules applied to all promotions.
+    #[serde(default)]
+    pub global: GlobalRules,
+}
+
+/// Source rule for multi-source promotion.
+#[derive(Debug, Deserialize, Clone, ConfigDoc)]
+pub struct SourceRule {
+    /// Priority for conflict resolution (higher = higher priority).
+    #[config_doc(example = "1")]
+    #[serde(default)]
+    pub priority: u32,
+
+    /// Description of this source.
+    #[serde(default)]
+    pub description: String,
+
+    /// Path override for this source (if different from repo path).
+    #[serde(default)]
+    pub path: Option<String>,
+
+    /// Components to include from this source (glob patterns).
+    #[serde(default)]
+    pub include: Vec<String>,
+
+    /// Components to exclude from this source (glob patterns).
+    #[serde(default)]
+    pub exclude: Vec<String>,
+}
+
+/// Conflict resolution strategies.
+#[derive(Debug, Deserialize, Clone, Default, ConfigDoc)]
+pub struct ConflictResolution {
+    /// Strategy for version conflicts: highest, newest, source_priority.
+    #[config_doc(default = "highest", example = "highest")]
+    #[serde(default)]
+    pub version_strategy: VersionStrategy,
+
+    /// Strategy for config conflicts: source_priority, merge, fail.
+    #[config_doc(default = "source_priority", example = "source_priority")]
+    #[serde(default)]
+    pub config_strategy: ConfigStrategy,
+
+    /// Source priority order (for source_priority strategy).
+    #[serde(default)]
+    pub source_order: Vec<String>,
+}
+
+/// Version conflict resolution strategy.
+#[derive(Debug, Deserialize, Clone, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum VersionStrategy {
+    /// Use highest version number.
+    #[default]
+    Highest,
+    /// Use newest by timestamp (requires metadata).
+    Newest,
+    /// Use version from highest priority source.
+    SourcePriority,
+}
+
+impl std::fmt::Display for VersionStrategy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VersionStrategy::Highest => write!(f, "highest"),
+            VersionStrategy::Newest => write!(f, "newest"),
+            VersionStrategy::SourcePriority => write!(f, "source_priority"),
+        }
+    }
+}
+
+/// Config conflict resolution strategy.
+#[derive(Debug, Deserialize, Clone, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ConfigStrategy {
+    /// Use config from highest priority source.
+    #[default]
+    SourcePriority,
+    /// Attempt to merge configs.
+    Merge,
+    /// Fail on conflict.
+    Fail,
+}
+
+impl std::fmt::Display for ConfigStrategy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConfigStrategy::SourcePriority => write!(f, "source_priority"),
+            ConfigStrategy::Merge => write!(f, "merge"),
+            ConfigStrategy::Fail => write!(f, "fail"),
+        }
+    }
+}
+
+/// Promotion action for a component.
+#[derive(Debug, Deserialize, Clone, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum PromotionAction {
+    /// Always promote without question.
+    #[default]
+    Always,
+    /// Flag for human/opencode review.
+    Review,
+    /// Never promote this component.
+    Never,
+}
+
+impl std::fmt::Display for PromotionAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PromotionAction::Always => write!(f, "always"),
+            PromotionAction::Review => write!(f, "review"),
+            PromotionAction::Never => write!(f, "never"),
+        }
+    }
+}
+
+/// Component-level promotion rule.
+#[derive(Debug, Deserialize, Clone, ConfigDoc)]
+pub struct ComponentRule {
+    /// Action to take: always, review, never.
+    #[config_doc(example = "always")]
+    #[serde(default)]
+    pub action: PromotionAction,
+
+    /// Human-readable notes for reviewers.
+    #[serde(default)]
+    pub notes: String,
+
+    /// Version constraint (semver range).
+    #[serde(default)]
+    pub version_constraint: Option<String>,
+}
+
+/// Global rules applied to all promotions.
+#[derive(Debug, Deserialize, Clone, Default, ConfigDoc)]
+pub struct GlobalRules {
+    /// Patterns to always exclude.
+    #[serde(default)]
+    pub exclude: Vec<String>,
+
+    /// Patterns that require review.
+    #[serde(default)]
+    pub review_required: Vec<String>,
+
+    /// Version change rules.
+    #[serde(default)]
+    pub version_rules: VersionRules,
+}
+
+/// Version change rules.
+#[derive(Debug, Deserialize, Clone, Default, ConfigDoc)]
+pub struct VersionRules {
+    /// Allow version downgrades.
+    #[config_doc(default = "false")]
+    #[serde(default)]
+    pub allow_downgrade: bool,
+
+    /// Allow pre-release versions in production.
+    #[config_doc(default = "false")]
+    #[serde(default)]
+    pub allow_prerelease: bool,
+
+    /// Minimum version age before promotion (hours).
+    #[serde(default)]
+    pub min_age_hours: Option<u32>,
+}
+
+impl PromotionRules {
+    /// Check if rules are defined.
+    pub fn has_rules(&self) -> bool {
+        !self.sources.is_empty() || !self.components.is_empty()
+    }
+
+    /// Get action for a component path.
+    pub fn get_action(&self, component: &str) -> PromotionAction {
+        // Check exact match first
+        if let Some(rule) = self.components.get(component) {
+            return rule.action.clone();
+        }
+
+        // Check global exclusions
+        for pattern in &self.global.exclude {
+            if glob_match::glob_match(pattern, component) {
+                return PromotionAction::Never;
+            }
+        }
+
+        // Check global review required
+        for pattern in &self.global.review_required {
+            if glob_match::glob_match(pattern, component) {
+                return PromotionAction::Review;
+            }
+        }
+
+        // Default: always promote
+        PromotionAction::Always
+    }
+
+    /// Check if a source should include a component.
+    pub fn source_includes(&self, source: &str, component: &str) -> bool {
+        if let Some(rule) = self.sources.get(source) {
+            // Check exclusions first
+            for pattern in &rule.exclude {
+                if glob_match::glob_match(pattern, component) {
+                    return false;
+                }
+            }
+
+            // If no includes defined, include all
+            if rule.include.is_empty() {
+                return true;
+            }
+
+            // Check inclusions
+            for pattern in &rule.include {
+                if glob_match::glob_match(pattern, component) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // Source not defined, include by default
+        true
+    }
+
+    /// Get source priority (higher = higher priority).
+    pub fn get_source_priority(&self, source: &str) -> u32 {
+        self.sources.get(source).map(|r| r.priority).unwrap_or(0)
+    }
+
+    /// Resolve version conflict between sources.
+    pub fn resolve_version_conflict(
+        &self,
+        versions: &[(String, String)], // (source, version)
+    ) -> Option<(String, String)> {
+        if versions.is_empty() {
+            return None;
+        }
+
+        if versions.len() == 1 {
+            return Some(versions[0].clone());
+        }
+
+        match &self.conflict_resolution.version_strategy {
+            VersionStrategy::Highest => {
+                // Find highest version
+                versions
+                    .iter()
+                    .max_by(|a, b| compare_versions(&a.1, &b.1))
+                    .cloned()
+            }
+            VersionStrategy::SourcePriority => {
+                // Find highest priority source
+                versions
+                    .iter()
+                    .max_by_key(|(source, _)| self.get_source_priority(source))
+                    .cloned()
+            }
+            VersionStrategy::Newest => {
+                // Not implemented - would require timestamp metadata
+                versions.first().cloned()
+            }
+        }
+    }
+}
+
+fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
+    let parse_parts = |v: &str| -> Vec<u64> {
+        v.trim_start_matches('v')
+            .trim_start_matches('V')
+            .split('.')
+            .filter_map(|p| p.split('-').next()?.parse().ok())
+            .collect()
+    };
+
+    let a_parts = parse_parts(a);
+    let b_parts = parse_parts(b);
+
+    for i in 0..std::cmp::max(a_parts.len(), b_parts.len()) {
+        let a_val = a_parts.get(i).unwrap_or(&0);
+        let b_val = b_parts.get(i).unwrap_or(&0);
+        match a_val.cmp(b_val) {
+            std::cmp::Ordering::Equal => continue,
+            other => return other,
+        }
+    }
+
+    std::cmp::Ordering::Equal
 }
 
 /// Repository configuration.
@@ -257,6 +571,57 @@ audit:
   enabled: true
   # Path to audit log file
   log_file: .promotion-log.yaml
+
+# Multi-source promotion rules (optional)
+# Used for complex workflows with multiple staging sources
+rules:
+  # Source definitions with priorities
+  sources:
+    staging-homelab:
+      priority: 1
+      description: "Homelab staging environment"
+      include:
+        - platform/*
+        - system/monitoring/*
+      exclude:
+        - platform/homeassistant/*
+
+    staging-work:
+      priority: 2
+      description: "Work staging environment"
+      include:
+        - apps/*
+        - system/auth/*
+
+  # Conflict resolution strategies
+  conflict_resolution:
+    version_strategy: highest
+    config_strategy: source_priority
+    source_order:
+      - staging-work
+      - staging-homelab
+
+  # Component-level rules
+  components:
+    platform/postgres-operator:
+      action: always
+    platform/homeassistant:
+      action: never
+      notes: "Home-specific, not for work production"
+    system/auth/keycloak:
+      action: review
+      notes: "Check for env-specific realm configs"
+
+  # Global rules
+  global:
+    exclude:
+      - "*/custom/*"
+      - "*/env/*"
+    review_required:
+      - "*/secrets/*"
+    version_rules:
+      allow_downgrade: false
+      allow_prerelease: false
 "#
         .to_string()
     }

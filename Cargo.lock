@@ -324,6 +324,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "glob-match"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9985c9503b412198aa4197559e9a318524ebc4519c229bfa05a535828c950b9d"
+
+[[package]]
 name = "globset"
 version = "0.4.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -756,6 +762,7 @@ dependencies = [
  "console",
  "dirs",
  "git2",
+ "glob-match",
  "globset",
  "indicatif",
  "regex",

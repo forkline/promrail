@@ -161,6 +161,22 @@ pub enum VersionsCommands {
         #[arg(name = "filter")]
         filter_vec: Vec<String>,
     },
+
+    #[command(about = "Merge versions from multiple sources")]
+    Merge {
+        #[arg(
+            short = 's',
+            long,
+            help = "Source paths (can be specified multiple times)"
+        )]
+        source_vec: Vec<String>,
+
+        #[arg(short = 'o', long, help = "Output file path")]
+        output: Option<String>,
+
+        #[arg(long, help = "Show merge decisions and warnings")]
+        explain: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]

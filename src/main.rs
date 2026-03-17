@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use console::style;
-use tracing::info;
+use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 
 mod cli;
@@ -218,6 +218,65 @@ fn handle_versions_command(command: VersionsCommands) -> AppResult<()> {
                     }
                     println!();
                 }
+            }
+        }
+        VersionsCommands::Merge {
+            source_vec,
+            output,
+            explain,
+        } => {
+            if source_vec.len() < 2 {
+                return Err(error::PromrailError::ConfigInvalid(
+                    "merge requires at least 2 sources".to_string(),
+                ));
+            }
+
+            info!("Merging versions from {} sources", source_vec.len());
+
+            // Extract versions from all sources
+            let mut sources: Vec<(String, versions::VersionReport)> = Vec::new();
+            for source in &source_vec {
+                let source_path = expand_path(source);
+                let report = versions::extract_versions(&source_path, &[])?;
+                sources.push((source.clone(), report));
+            }
+
+            // Load config to get rules
+            let config_path = find_config_path(None)?;
+            let config = Config::load(&config_path)?;
+
+            // Merge with rules
+            let result = versions::merge_versions(&sources, &config.rules)?;
+
+            // Output results
+            if explain {
+                println!("{}", versions::explain_merge(&result));
+            }
+
+            // Show warnings
+            for warning in &result.warnings {
+                warn!("{}", warning);
+            }
+
+            // Save or print merged report
+            let json = serde_json::to_string_pretty(&result.report)?;
+
+            if let Some(output_path) = output {
+                std::fs::write(&output_path, &json)?;
+                info!("Written merged versions to {}", output_path);
+            } else {
+                println!("{}", json);
+            }
+
+            // Summary
+            info!(
+                "Merged {} components from {} sources",
+                result.report.components.len(),
+                sources.len()
+            );
+
+            if !result.removed.is_empty() {
+                warn!("Removed {} components due to rules", result.removed.len());
             }
         }
     }
