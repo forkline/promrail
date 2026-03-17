@@ -4,13 +4,13 @@ This document describes the CI/CD workflows and their setup requirements.
 
 ## Workflows Overview
 
-| Workflow | Trigger | Purpose |
-|----------|---------|---------|
-| `rust.yml` | Push/PR to main, tags | Build, test, lint, release |
-| `pre-commit.yml` | Push/PR to main | Run pre-commit hooks |
-| `stale.yml` | Daily schedule | Close stale issues/PRs |
-| `auto-tag.yaml` | Push to master | Auto-create git tags |
-| `aur-publish.yml` | After Rust workflow | Publish to AUR |
+| Workflow          | Trigger               | Purpose                    |
+| ----------------- | --------------------- | -------------------------- |
+| `rust.yml`        | Push/PR to main, tags | Build, test, lint, release |
+| `pre-commit.yml`  | Push/PR to main       | Run pre-commit hooks       |
+| `stale.yml`       | Daily schedule        | Close stale issues/PRs     |
+| `auto-tag.yaml`   | Push to main          | Auto-create git tags       |
+| `aur-publish.yml` | After Rust workflow   | Publish to AUR             |
 
 ## Secrets Required
 
@@ -18,13 +18,14 @@ This document describes the CI/CD workflows and their setup requirements.
 
 Publish packages to Arch Linux User Repository (AUR).
 
-| Secret | Description | How to Create |
-|--------|-------------|---------------|
-| `AUR_USERNAME` | Your AUR username | Register at https://aur.archlinux.org |
-| `AUR_EMAIL` | Email for git commits | Any valid email |
-| `AUR_SSH_PRIVATE_KEY` | SSH key for AUR | Generate with `ssh-keygen -t ed25519` |
+| Secret                | Description           | How to Create                         |
+| --------------------- | --------------------- | ------------------------------------- |
+| `AUR_USERNAME`        | Your AUR username     | Register at https://aur.archlinux.org |
+| `AUR_EMAIL`           | Email for git commits | Any valid email                       |
+| `AUR_SSH_PRIVATE_KEY` | SSH key for AUR       | Generate with `ssh-keygen -t ed25519` |
 
 **Setup:**
+
 1. Create an AUR account at https://aur.archlinux.org/register
 2. Generate SSH key: `ssh-keygen -t ed25519 -f ~/.ssh/aur -N ""`
 3. Add public key to AUR: https://aur.archlinux.org/account (SSH Public Key field)
@@ -36,10 +37,10 @@ Publish packages to Arch Linux User Repository (AUR).
 
 Automatically create signed git tags from changelog versions.
 
-| Secret | Description | How to Create |
-|--------|-------------|---------------|
-| `PAT` | Personal Access Token | GitHub Settings → Developer settings → Personal access tokens |
-| `GPG_PRIVATE_KEY` | GPG key for signing tags | Generate with `gpg --full-generate-key` |
+| Secret            | Description              | How to Create                                                 |
+| ----------------- | ------------------------ | ------------------------------------------------------------- |
+| `PAT`             | Personal Access Token    | GitHub Settings → Developer settings → Personal access tokens |
+| `GPG_PRIVATE_KEY` | GPG key for signing tags | Generate with `gpg --full-generate-key`                       |
 
 **Setup:**
 
@@ -49,6 +50,7 @@ Automatically create signed git tags from changelog versions.
    - Add to repository secrets as `PAT`
 
 2. **Create GPG Key:**
+
    ```bash
    # Generate GPG key
    gpg --full-generate-key
@@ -71,9 +73,9 @@ Automatically create signed git tags from changelog versions.
 
 Build and release workflow. No secrets required - `GITHUB_TOKEN` is auto-provided.
 
-| Secret | Description | Required |
-|--------|-------------|----------|
-| `GITHUB_TOKEN` | Auto-provided by GitHub | Auto |
+| Secret         | Description             | Required |
+| -------------- | ----------------------- | -------- |
+| `GITHUB_TOKEN` | Auto-provided by GitHub | Auto     |
 
 ### `pre-commit.yml`
 
@@ -88,6 +90,7 @@ Uses only `GITHUB_TOKEN` (auto-provided).
 ### Disable AUR Publishing
 
 If you don't need AUR packages:
+
 1. Go to Actions → aur-publish
 2. Click "Disable workflow"
 
@@ -96,6 +99,7 @@ Or remove the `aur-publish.yml` file.
 ### Disable Auto-Tagging
 
 If you prefer manual tagging:
+
 1. Go to Actions → Auto tag
 2. Click "Disable workflow"
 
@@ -104,7 +108,7 @@ Or remove the `auto-tag.yaml` file.
 ## Workflow Dependencies
 
 ```
-Push to main/master
+Push to main/main
     │
     ├──► rust.yml (test, lint, build)
     │

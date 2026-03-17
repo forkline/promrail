@@ -5,8 +5,8 @@
 # 2. Ensure .pre-commit-config.yaml exists in the repository
 #
 # Workflow Triggers:
-# - Push to main/master branch
-# - Pull requests to main/master
+# - Push to main/main branch
+# - Pull requests to main/main
 #
 # Note: Rust hooks (fmt, clippy) are skipped here as they run in rust.yml
 
@@ -14,9 +14,9 @@ name: Pre-commit
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   pull_request:
-    branches: [main, master]
+    branches: [main]
 
 jobs:
   pre-commit:
