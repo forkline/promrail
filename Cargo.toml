@@ -1,0 +1,30 @@
+[package]
+name = "promrail"
+version = "0.1.0"
+edition = "2021"
+authors = ["Agil"]
+description = "Git-native GitOps promotion tool"
+license = "MIT"
+
+[dependencies]
+clap = { version = "4", features = ["derive", "env"] }
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+globset = "0.4"
+git2 = "0.19"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1"
+thiserror = "2"
+console = "0.15"
+indicatif = "0.17"
+time = { version = "0.3", features = ["formatting", "local-offset"] }
+dirs = "6"
+walkdir = "2"
+regex = "1"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints.rust]
+dead_code = "allow"

@@ -1,0 +1,45 @@
+# Promrail Configuration
+# See docs/adr-001-architecture.md for details
+
+version: 1
+
+# Repositories
+repos:
+  gitops:
+    path: ~/gitops
+    environments:
+      staging:
+        path: clusters/staging
+      production:
+        path: clusters/production
+
+default_repo: gitops
+
+# Protected directories - never modified during promotion
+protected_dirs:
+  - custom
+  - env
+  - local
+  - test
+
+# Allowlist - only these patterns are candidates for promotion
+allowlist:
+  - "platform/**/*.yaml"
+  - "system/**/*.yaml"
+  - "bootstrap/**/*.yaml"
+  - "apps/**/*.yaml"
+
+# Denylist - explicit exclusions (takes precedence over allowlist)
+denylist:
+  - "**/secrets*"
+  - "**/*secret*"
+  - "**/test/**"
+
+# Git integration
+git:
+  require_clean_tree: true
+
+# Audit logging
+audit:
+  enabled: true
+  log_file: .promotion-log.yaml
