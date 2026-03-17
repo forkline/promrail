@@ -1,10 +1,7 @@
 # Rust CI Workflow
 #
 # Setup Requirements:
-# 1. No secrets required for basic CI (fmt, clippy, test)
-# 2. For release publishing, set these repository secrets:
-#    - CRATES_IO_TOKEN: API token from crates.io for publishing
-#    - GITHUB_TOKEN: Automatically provided by GitHub Actions
+# 1. No secrets required (GITHUB_TOKEN is auto-provided)
 #
 # Workflow Triggers:
 # - Push to main/master branch

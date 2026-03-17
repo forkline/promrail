@@ -69,14 +69,11 @@ Automatically create signed git tags from changelog versions.
 
 ### `rust.yml`
 
-Build and release workflow. Most secrets are auto-provided.
+Build and release workflow. No secrets required - `GITHUB_TOKEN` is auto-provided.
 
 | Secret | Description | Required |
 |--------|-------------|----------|
 | `GITHUB_TOKEN` | Auto-provided by GitHub | Auto |
-| `CRATES_IO_TOKEN` | For crates.io publishing | Only for `cargo publish` |
-
-**Note:** The workflow already documents this in comments. `GITHUB_TOKEN` is automatically provided.
 
 ### `pre-commit.yml`
 
