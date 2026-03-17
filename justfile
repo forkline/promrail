@@ -74,10 +74,6 @@ release:
     tar -czf {{PKG_BASE_NAME}}.tar.gz -C {{CARGO_TARGET_DIR}}/{{CARGO_TARGET}}/release promrail
     @echo "Released in {{CARGO_TARGET_DIR}}/{{CARGO_TARGET}}/release/promrail"
 
-# Publish crate to crates.io
-publish:
-    cargo publish
-
 # Clean build artifacts
 clean:
     cargo clean
