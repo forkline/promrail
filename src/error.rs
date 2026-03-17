@@ -5,7 +5,9 @@ pub enum PromrailError {
     #[error("Git repository not found at '{0}'")]
     GitNotFound(String),
 
-    #[error("Git tree is not clean. Commit or stash changes first.")]
+    #[error(
+        "Git working tree has uncommitted changes.\n  Commit or stash your changes, or use --force to proceed anyway."
+    )]
     DirtyTree,
 
     #[error("Environment '{env}' not found in repo '{repo}'")]

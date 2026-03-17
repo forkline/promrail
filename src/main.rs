@@ -443,10 +443,11 @@ fn handle_repo_command(args: cli::Cli) -> AppResult<()> {
             yes,
             diff,
             include_protected,
+            force,
             allow_duplicates,
             only_existing,
         } => {
-            if config.git.require_clean_tree && !repo.is_clean()? {
+            if config.git.require_clean_tree && !force && !repo.is_clean()? {
                 return Err(error::PromrailError::DirtyTree);
             }
 
