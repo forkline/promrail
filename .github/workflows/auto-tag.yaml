@@ -1,3 +1,23 @@
+# Auto Tag Workflow
+#
+# Setup Requirements:
+# 1. Create Personal Access Token (PAT) with 'repo' scope
+#    GitHub → Settings → Developer settings → Personal access tokens
+# 2. Generate GPG key for signing tags:
+#    gpg --full-generate-key
+#    gpg --armor --export-secret-keys YOUR_EMAIL > gpg-private-key.asc
+# 3. Add public key to GitHub account (SSH and GPG keys)
+# 4. Add repository secrets:
+#    - PAT: Personal Access Token
+#    - GPG_PRIVATE_KEY: Contents of gpg-private-key.asc
+#
+# Workflow Triggers:
+# - Push to master branch
+# - Reads version from CHANGELOG.md
+# - Creates signed tag if version changed
+#
+# See docs/workflows.md for detailed setup instructions
+
 name: Auto tag
 
 on:

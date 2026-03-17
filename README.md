@@ -276,7 +276,9 @@ See [docs/adr-001-architecture.md](docs/adr-001-architecture.md) for design deci
 ## Documentation
 
 - [Usage Guide](docs/usage.md) - Detailed workflows and examples
+- [Workflows & Secrets](docs/workflows.md) - CI/CD setup and secrets
 - [Architecture Decision Record](docs/adr-001-architecture.md) - Design decisions
+- [AGENTS.md](AGENTS.md) - Opencode AI assistant guidelines
 - `promrail config show` - Embedded configuration reference
 
 ## Development
