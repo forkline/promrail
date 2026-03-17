@@ -65,7 +65,7 @@ repos:
     environments:
       staging: { path: clusters/staging }
       production: { path: clusters/production }
-  
+
   work:
     path: ~/gitops/work
     environments:
@@ -222,13 +222,13 @@ Only files matching allowlist patterns are considered for promotion:
 allowlist:
   # All YAML files under platform/
   - "platform/**/*.yaml"
-  
+
   # All YAML files under system/
   - "system/**/*.yaml"
-  
+
   # Specific app
   - "apps/myapp/**/*.yaml"
-  
+
   # All YAML files at root
   - "*.yaml"
 ```
@@ -241,10 +241,10 @@ Denylist takes precedence over allowlist:
 denylist:
   # Any file with "secret" in the name
   - "**/*secret*"
-  
+
   # Files in test directories
   - "**/test/**"
-  
+
   # Specific files
   - "**/values-local.yaml"
 ```
@@ -438,4 +438,198 @@ Denylist patterns must match the full path:
 denylist:
   - "**/secrets*"    # Matches any file starting with "secrets"
   - "**/*secret*"    # Matches any file containing "secret"
+```
+
+## Version Management
+
+Promrail can extract, compare, and apply Helm chart versions and container image tags across environments.
+
+### `promrail versions extract`
+
+Extract versions from a repository path:
+
+```bash
+# Extract all versions
+promrail versions extract --path ~/gitops/staging
+
+# Save to file
+promrail versions extract --path ~/gitops/staging -o versions.json
+
+# Filter to specific components
+promrail versions extract --path ~/gitops/staging platform/nginx
+```
+
+The output is JSON with:
+- `source_path`: Repository path
+- `components`: Map of component path to versions
+  - `helm_charts`: List of Helm chart versions from kustomization.yaml and Chart.yaml
+  - `container_images`: List of container image tags from values.yaml
+
+### `promrail versions apply`
+
+Apply versions from a file to a repository:
+
+```bash
+# Apply all versions
+promrail versions apply -f versions.json --path ~/gitops/production
+
+# Dry run (preview changes)
+promrail versions apply -f versions.json --path ~/gitops/production --dry-run
+
+# Filter to specific components
+promrail versions apply -f versions.json --path ~/gitops/production --component platform/nginx,system/redis
+
+# Check for version downgrades
+promrail versions apply -f versions.json --path ~/gitops/production --check-conflicts
+
+# Create a snapshot before applying
+promrail versions apply -f versions.json --path ~/gitops/production --snapshot
+```
+
+### `promrail versions diff`
+
+Compare versions between two repositories:
+
+```bash
+promrail versions diff --source ~/gitops/staging --dest ~/gitops/production
+```
+
+Output shows version differences:
+- Green: Version in destination
+- Red: Version in source
+- Yellow: Component name
+
+## Snapshots
+
+Snapshots record the state of a repository before applying changes, enabling rollback.
+
+### Snapshot Storage
+
+Snapshots are stored in `.promotion-snapshots.yaml` in the destination repository:
+
+```yaml
+snapshots:
+  - id: snap_20260317_abc123
+    created_at: "2026-03-17T10:00:00Z"
+    source_path: ~/gitops/staging
+    dest_path: ~/gitops/production
+    status: Applied
+    files_modified:
+      - platform/nginx/kustomization.yaml
+    version_changes:
+      platform/nginx:
+        - file: kustomization.yaml
+          kind: HelmChart
+          name: nginx
+          before: "1.2.3"
+          after: "1.3.0"
+```
+
+### `promrail snapshot list`
+
+List all snapshots:
+
+```bash
+promrail snapshot list --path ~/gitops/production
+```
+
+### `promrail snapshot show`
+
+Show snapshot details:
+
+```bash
+promrail snapshot show snap_20260317_abc123 --path ~/gitops/production
+```
+
+### `promrail snapshot rollback`
+
+Rollback to a snapshot:
+
+```bash
+promrail snapshot rollback snap_20260317_abc123 --path ~/gitops/production
+```
+
+### `promrail snapshot delete`
+
+Delete a snapshot:
+
+```bash
+promrail snapshot delete snap_20260317_abc123 --path ~/gitops/production
+```
+
+## Config Reference
+
+View configuration documentation directly in the CLI:
+
+### `promrail config show`
+
+Display all configuration options with descriptions, defaults, and examples:
+
+```bash
+promrail config show
+```
+
+Output includes:
+- Field names and types
+- Descriptions from source code
+- Default values
+- Example values
+- Environment variables
+
+### `promrail config example`
+
+Generate a sample configuration file:
+
+```bash
+# Print to stdout
+promrail config example
+
+# Save to file
+promrail config example -o promrail.yaml
+```
+
+### `promrail config diff`
+
+Compare configuration files between directories:
+
+```bash
+promrail config diff ~/gitops/staging ~/gitops/production
+
+# Filter to specific files
+promrail config diff ~/gitops/staging ~/gitops/production -f kustomization.yaml,values.yaml
+```
+
+## Workflows
+
+### Version Promotion Workflow
+
+```bash
+# 1. Extract versions from staging
+promrail versions extract --path ~/gitops/staging -o staging-versions.json
+
+# 2. Review the versions
+cat staging-versions.json | jq
+
+# 3. Compare with production
+promrail versions diff --source ~/gitops/staging --dest ~/gitops/production
+
+# 4. Apply with conflict detection and snapshot
+promrail versions apply -f staging-versions.json --path ~/gitops/production \
+  --check-conflicts --snapshot
+
+# 5. If something goes wrong, rollback
+promrail snapshot list --path ~/gitops/production
+promrail snapshot rollback <snapshot-id> --path ~/gitops/production
+```
+
+### Cross-Repository Promotion
+
+For promoting between separate repositories:
+
+```bash
+# Extract from source repo
+promrail versions extract --path ~/gitops-apps/staging -o versions.json
+
+# Apply to destination repo
+promrail versions apply -f versions.json --path ~/gitops-infra/production
 ```

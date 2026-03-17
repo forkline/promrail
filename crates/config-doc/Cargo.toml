@@ -1,0 +1,8 @@
+[package]
+name = "config-doc"
+version = "0.1.0"
+edition = "2024"
+description = "Runtime support for configuration documentation"
+
+[dependencies]
+config-doc-derive = { path = "../config-doc-derive" }

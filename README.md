@@ -10,6 +10,9 @@ Git-native GitOps promotion tool written in Rust.
 - **Git-native operations**: Uses `git2` for repository handling, status checks, and diffs
 - **Colored diff output**: See what would change before applying
 - **Audit logging**: Track promotions in `.promotion-log.yaml`
+- **Version management**: Extract, apply, and diff Helm chart versions and container images
+- **Snapshots**: Create restore points before applying changes with rollback support
+- **Conflict detection**: Warn on version downgrades during apply
 
 ## Installation
 
@@ -21,39 +24,15 @@ cargo build --release
 
 1. Create a `promrail.yaml` configuration file:
 
-```yaml
-version: 1
+```bash
+# Generate example config
+promrail config example > promrail.yaml
+```
 
-repos:
-  gitops:
-    path: ~/path/to/gitops
-    environments:
-      staging:
-        path: clusters/staging
-      production:
-        path: clusters/production
+Or see all configuration options:
 
-default_repo: gitops
-
-protected_dirs:
-  - custom
-  - env
-  - local
-
-allowlist:
-  - "platform/**/*.yaml"
-  - "system/**/*.yaml"
-  - "apps/**/*.yaml"
-
-denylist:
-  - "**/secrets*"
-  - "**/*secret*"
-
-git:
-  require_clean_tree: true
-
-audit:
-  enabled: true
+```bash
+promrail config show
 ```
 
 2. Validate your configuration:
@@ -89,6 +68,61 @@ promrail promote --source staging --dest production --yes
 | `diff` | Show what would change without applying |
 | `promote` | Copy allowlisted files from source to destination |
 | `validate` | Validate configuration file |
+| `versions` | Version extraction and management |
+| `snapshot` | Snapshot management for rollbacks |
+| `config` | Configuration reference and examples |
+
+### Version Management
+
+Extract and apply Helm chart versions and container image tags:
+
+```bash
+# Extract versions from a repository
+promrail versions extract --path ~/gitops/staging -o versions.json
+
+# Apply versions to another environment
+promrail versions apply -f versions.json --path ~/gitops/production
+
+# Compare versions between environments
+promrail versions diff --source ~/gitops/staging --dest ~/gitops/production
+
+# Apply with conflict detection and snapshot
+promrail versions apply -f versions.json --path ~/gitops/production \
+  --check-conflicts --snapshot
+```
+
+### Snapshots
+
+Create restore points before applying changes:
+
+```bash
+# List snapshots
+promrail snapshot list --path ~/gitops/production
+
+# Show snapshot details
+promrail snapshot show <id> --path ~/gitops/production
+
+# Rollback to a snapshot
+promrail snapshot rollback <id> --path ~/gitops/production
+
+# Delete a snapshot
+promrail snapshot delete <id> --path ~/gitops/production
+```
+
+### Config Reference
+
+View configuration documentation directly in the CLI:
+
+```bash
+# Show all configuration options
+promrail config show
+
+# Generate example configuration
+promrail config example > promrail.yaml
+
+# Generate to a file
+promrail config example -o promrail.yaml
+```
 
 ## Options
 
@@ -113,6 +147,8 @@ promrail promote --source staging --dest production --yes
 
 ## Configuration
 
+Run `promrail config show` for embedded documentation, or `promrail config example` for a sample config file.
+
 ### Repositories
 
 Define multiple GitOps repositories with their environments:
@@ -124,7 +160,7 @@ repos:
     environments:
       staging: { path: clusters/staging }
       production: { path: clusters/production }
-  
+
   work:
     path: ~/gitops/work
     environments:
@@ -181,6 +217,7 @@ See [docs/adr-001-architecture.md](docs/adr-001-architecture.md) for design deci
 
 - [Usage Guide](docs/usage.md) - Detailed workflows and examples
 - [Architecture Decision Record](docs/adr-001-architecture.md) - Design decisions
+- `promrail config show` - Embedded configuration reference
 
 ## Development
 

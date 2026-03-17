@@ -310,6 +310,19 @@ fn handle_snapshot_command(command: SnapshotCommands) -> AppResult<()> {
 
 fn handle_config_command(command: ConfigCommands) -> AppResult<()> {
     match command {
+        ConfigCommands::Show {} => {
+            println!("{}", Config::generate_full_docs());
+        }
+        ConfigCommands::Example { output } => {
+            let example = Config::generate_full_example();
+            match output {
+                Some(path) => {
+                    std::fs::write(&path, example)?;
+                    info!("Written example config to {}", path);
+                }
+                None => println!("{}", example),
+            }
+        }
         ConfigCommands::Diff { source, dest, file } => {
             let source_path = expand_path(&source);
             let dest_path = expand_path(&dest);

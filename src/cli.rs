@@ -198,13 +198,22 @@ pub enum SnapshotCommands {
 
 #[derive(Debug, Subcommand)]
 pub enum ConfigCommands {
+    #[command(about = "Show configuration reference with all options")]
+    Show {},
+
+    #[command(about = "Generate example configuration file")]
+    Example {
+        #[arg(short, long, help = "Output file path (default: stdout)")]
+        output: Option<String>,
+    },
+
     #[command(about = "Compare configuration files between directories")]
     Diff {
         source: String,
 
         dest: String,
 
-        #[arg(short = 'f', long, help = "Filter to specific files (comma-separated)")]
+        #[arg(short, long, help = "Filter to specific files (comma-separated)")]
         file: Option<String>,
     },
 }
