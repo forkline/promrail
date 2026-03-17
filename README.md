@@ -16,8 +16,40 @@ Git-native GitOps promotion tool written in Rust.
 
 ## Installation
 
+### Cargo
+
 ```bash
-cargo build --release
+cargo install promrail
+```
+
+### Arch Linux
+
+```bash
+yay -S promrail
+```
+
+or the binary from AUR:
+
+```bash
+yay -S promrail-bin
+```
+
+### Binaries
+
+Binaries are made available each release for the Linux and MacOS operating systems.
+
+You can download a prebuilt binary from our [Releases](https://github.com/forkline/promrail/releases).
+
+```bash
+curl -s https://api.github.com/repos/forkline/promrail/releases/latest \
+  | grep browser_download_url \
+  | grep -v sha256 \
+  | grep $(uname -m) \
+  | grep linux \
+  | cut -d '"' -f 4 \
+  | xargs curl -L \
+  | tar xvz
+sudo mv promrail /usr/local/bin
 ```
 
 ## Quick Start
