@@ -1,8 +1,11 @@
+//! Configuration handling for promrail.
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 
 use serde::Deserialize;
 
+/// Main configuration structure.
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
     pub version: u32,
@@ -22,6 +25,7 @@ pub struct Config {
     pub audit: AuditConfig,
 }
 
+/// Repository configuration.
 #[derive(Debug, Deserialize, Clone)]
 pub struct RepoConfig {
     pub path: String,
@@ -29,6 +33,7 @@ pub struct RepoConfig {
 }
 
 impl RepoConfig {
+    /// Resolve path with ~ expansion.
     pub fn resolved_path(&self) -> PathBuf {
         shellexpand::full(&self.path)
             .map(|p| PathBuf::from(p.as_ref()))
@@ -36,11 +41,13 @@ impl RepoConfig {
     }
 }
 
+/// Environment configuration (staging, production, etc.).
 #[derive(Debug, Deserialize, Clone)]
 pub struct EnvironmentConfig {
     pub path: String,
 }
 
+/// Delete behavior configuration (currently unused, delete is CLI-controlled).
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct DeleteConfig {
     #[serde(default)]
@@ -49,6 +56,7 @@ pub struct DeleteConfig {
     pub dest_based: bool,
 }
 
+/// Git integration configuration.
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct GitConfig {
     #[serde(default = "default_true")]
@@ -59,6 +67,7 @@ fn default_true() -> bool {
     true
 }
 
+/// Audit logging configuration.
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct AuditConfig {
     #[serde(default = "default_true")]
@@ -72,6 +81,7 @@ fn default_log_file() -> String {
 }
 
 impl Config {
+    /// Load configuration from a YAML file.
     pub fn load(path: &std::path::Path) -> crate::error::AppResult<Self> {
         let content = std::fs::read_to_string(path)
             .map_err(|_| crate::error::PromrailError::ConfigNotFound(path.display().to_string()))?;
@@ -80,6 +90,7 @@ impl Config {
         Ok(config)
     }
 
+    /// Validate configuration consistency.
     pub fn validate(&self) -> crate::error::AppResult<()> {
         if !self.repos.contains_key(&self.default_repo) {
             return Err(crate::error::PromrailError::ConfigInvalid(format!(
@@ -100,6 +111,7 @@ impl Config {
         Ok(())
     }
 
+    /// Get a repository by name, or the default if none specified.
     pub fn get_repo(&self, name: Option<&str>) -> crate::error::AppResult<(&String, &RepoConfig)> {
         let repo_name = name.unwrap_or(&self.default_repo);
         self.repos

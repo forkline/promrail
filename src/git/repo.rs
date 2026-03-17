@@ -1,15 +1,20 @@
+//! Git repository operations using git2.
+
 use std::path::{Path, PathBuf};
 
 use git2::{Repository, StatusOptions};
 
 use crate::error::{AppResult, PromrailError};
 
+/// Git repository wrapper providing common operations.
 pub struct GitRepo {
     inner: Repository,
+    /// Path to the working directory.
     pub path: PathBuf,
 }
 
 impl GitRepo {
+    /// Discover and open a git repository at or above the given path.
     pub fn discover(path: &Path) -> AppResult<Self> {
         let repo = Repository::discover(path)
             .map_err(|_| PromrailError::GitNotFound(path.display().to_string()))?;
@@ -24,6 +29,7 @@ impl GitRepo {
         })
     }
 
+    /// Check if the working tree has no uncommitted changes.
     pub fn is_clean(&self) -> AppResult<bool> {
         let mut opts = StatusOptions::new();
         opts.include_untracked(true)
@@ -48,12 +54,14 @@ impl GitRepo {
         Ok(!has_changes)
     }
 
+    /// Get the current HEAD branch name.
     pub fn current_head(&self) -> AppResult<String> {
         let head = self.inner.head()?;
         let shorthand = head.shorthand().unwrap_or("HEAD");
         Ok(shorthand.to_string())
     }
 
+    /// Get the current commit SHA (short form).
     pub fn current_commit(&self) -> AppResult<String> {
         let head = self.inner.head()?;
         let commit = head.peel_to_commit()?;
@@ -61,20 +69,7 @@ impl GitRepo {
         Ok(short_id.chars().take(7).collect())
     }
 
-    pub fn list_tracked_files(&self, base_path: &Path) -> AppResult<Vec<PathBuf>> {
-        let mut files = Vec::new();
-        let index = self.inner.index()?;
-
-        for entry in index.iter() {
-            let path = PathBuf::from(std::str::from_utf8(&entry.path).unwrap_or_default());
-            if path.starts_with(base_path) {
-                files.push(path);
-            }
-        }
-
-        Ok(files)
-    }
-
+    /// Read file contents from the working directory.
     pub fn read_file(&self, path: &Path) -> AppResult<Option<String>> {
         let full_path = self.path.join(path);
         if full_path.exists() {
@@ -85,15 +80,7 @@ impl GitRepo {
         }
     }
 
-    pub fn write_file(&self, path: &Path, content: &str) -> AppResult<()> {
-        let full_path = self.path.join(path);
-        if let Some(parent) = full_path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        std::fs::write(&full_path, content)?;
-        Ok(())
-    }
-
+    /// Copy a file within the repository.
     pub fn copy_file(&self, source: &Path, dest: &Path) -> AppResult<()> {
         let source_full = self.path.join(source);
         let dest_full = self.path.join(dest);
@@ -106,15 +93,12 @@ impl GitRepo {
         Ok(())
     }
 
+    /// Delete a file from the working directory.
     pub fn delete_file(&self, path: &Path) -> AppResult<()> {
         let full_path = self.path.join(path);
         if full_path.exists() {
             std::fs::remove_file(&full_path)?;
         }
         Ok(())
-    }
-
-    pub fn file_exists(&self, path: &Path) -> bool {
-        self.path.join(path).exists()
     }
 }

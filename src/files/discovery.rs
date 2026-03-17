@@ -1,3 +1,5 @@
+//! File discovery and traversal.
+
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
@@ -6,10 +8,12 @@ use walkdir::WalkDir;
 use crate::error::AppResult;
 use crate::files::FileSelector;
 
+/// File discovery engine that walks directories and filters files.
 pub struct FileDiscovery {
     selector: FileSelector,
 }
 
+/// Result of file discovery containing files and directories.
 #[derive(Debug, Clone)]
 pub struct DiscoveredFiles {
     pub files: Vec<PathBuf>,
@@ -17,10 +21,12 @@ pub struct DiscoveredFiles {
 }
 
 impl FileDiscovery {
+    /// Create a new file discovery engine.
     pub fn new(selector: FileSelector) -> Self {
         Self { selector }
     }
 
+    /// Discover all files matching the selector and filter.
     pub fn discover(
         &self,
         root: &Path,
@@ -59,6 +65,7 @@ impl FileDiscovery {
         Ok(DiscoveredFiles { files, dirs })
     }
 
+    /// Get all subdirectories (excluding protected).
     pub fn get_subdirs(&self, root: &Path) -> HashSet<PathBuf> {
         let mut subdirs = HashSet::new();
 
@@ -76,6 +83,7 @@ impl FileDiscovery {
     }
 }
 
+/// Get all subdirectories recursively (without filtering).
 pub fn get_subdirs_recursive(root: &Path, include_root: bool) -> HashSet<PathBuf> {
     let mut subdirs = HashSet::new();
 

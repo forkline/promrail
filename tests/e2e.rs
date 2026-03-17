@@ -174,13 +174,14 @@ audit:
 // =============================================================================
 
 #[test]
-fn test_validate_success() {
+fn test_repo_not_found_error() {
     let repo = TestRepo::new();
     repo.create_config();
 
-    let (success, stdout, _stderr) = repo.run_promrail(&["validate"]);
+    let (success, _stdout, stderr) = repo.run_promrail(&["--repo", "nonexistent", "validate"]);
 
-    assert!(success, "validate should succeed: {}", stdout);
+    assert!(!success);
+    assert!(stderr.contains("RepoNotFound") || stderr.contains("not found in config"));
 }
 
 #[test]
@@ -842,7 +843,7 @@ fn test_overwrite_same_content_no_change() {
     repo.write_production_file("platform/config.yaml", content);
     repo.commit_all("Add same content");
 
-    let (success, stdout, _stderr) = repo.run_promrail(&[
+    let (success, _stdout, _stderr) = repo.run_promrail(&[
         "promote",
         "--source",
         "staging",
@@ -857,4 +858,19 @@ fn test_overwrite_same_content_no_change() {
         repo.read_production_file("platform/config.yaml"),
         Some(content.to_string())
     );
+}
+
+// =============================================================================
+// ERROR PATH TESTS
+// =============================================================================
+
+#[test]
+fn test_config_not_found_error() {
+    let repo = TestRepo::new();
+    // Don't create config
+
+    let (success, _stdout, stderr) = repo.run_promrail(&["validate"]);
+
+    assert!(!success);
+    assert!(stderr.contains("Config") || stderr.contains("not found"));
 }

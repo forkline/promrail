@@ -1,3 +1,5 @@
+//! Error types for promrail.
+
 #[derive(Debug, thiserror::Error)]
 pub enum PromrailError {
     #[error("Git repository not found at '{0}'")]
