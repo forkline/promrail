@@ -101,26 +101,26 @@ fn extract_from_kustomization(content: &str, source_file: &str) -> ComponentVers
     let mut versions = ComponentVersions::default();
 
     // Parse as generic YAML to extract helmCharts
-    if let Ok(doc) = serde_yaml::from_str::<serde_yaml::Value>(content) {
-        if let Some(helm_charts) = doc.get("helmCharts").and_then(|v| v.as_sequence()) {
-            for chart in helm_charts {
-                if let (Some(name), Some(version)) = (
-                    chart.get("name").and_then(|v| v.as_str()),
-                    chart.get("version").and_then(|v| v.as_str()),
-                ) {
-                    let repo = chart
-                        .get("repo")
-                        .and_then(|v| v.as_str())
-                        .or_else(|| chart.get("repository").and_then(|v| v.as_str()))
-                        .map(|s| s.to_string());
+    if let Ok(doc) = serde_yaml::from_str::<serde_yaml::Value>(content)
+        && let Some(helm_charts) = doc.get("helmCharts").and_then(|v| v.as_sequence())
+    {
+        for chart in helm_charts {
+            if let (Some(name), Some(version)) = (
+                chart.get("name").and_then(|v| v.as_str()),
+                chart.get("version").and_then(|v| v.as_str()),
+            ) {
+                let repo = chart
+                    .get("repo")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| chart.get("repository").and_then(|v| v.as_str()))
+                    .map(|s| s.to_string());
 
-                    versions.helm_charts.push(HelmChartVersion {
-                        name: name.to_string(),
-                        version: version.to_string(),
-                        repository: repo,
-                        source_file: source_file.to_string(),
-                    });
-                }
+                versions.helm_charts.push(HelmChartVersion {
+                    name: name.to_string(),
+                    version: version.to_string(),
+                    repository: repo,
+                    source_file: source_file.to_string(),
+                });
             }
         }
     }
@@ -207,21 +207,20 @@ fn extract_images_recursive(
             }
 
             // Also check for just "image: repo:tag" format
-            if let Some(image) = map.get(serde_yaml::Value::String("image".to_string())) {
-                if let Some(image_str) = image.as_str() {
-                    if let Some((repo, tag)) = parse_image_string(image_str) {
-                        images.push(ContainerImageVersion {
-                            name: repo,
-                            tag,
-                            source_file: source_file.to_string(),
-                            json_path: if path.is_empty() {
-                                "image".to_string()
-                            } else {
-                                format!("{}.image", path)
-                            },
-                        });
-                    }
-                }
+            if let Some(image) = map.get(serde_yaml::Value::String("image".to_string()))
+                && let Some(image_str) = image.as_str()
+                && let Some((repo, tag)) = parse_image_string(image_str)
+            {
+                images.push(ContainerImageVersion {
+                    name: repo,
+                    tag,
+                    source_file: source_file.to_string(),
+                    json_path: if path.is_empty() {
+                        "image".to_string()
+                    } else {
+                        format!("{}.image", path)
+                    },
+                });
             }
 
             // Recurse into nested structures

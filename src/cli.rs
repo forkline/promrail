@@ -96,10 +96,22 @@ pub enum Commands {
     #[command(about = "Validate configuration file")]
     Validate {},
 
-    #[command(about = "Extract versions from a repository")]
+    #[command(about = "Version extraction and management")]
     Versions {
         #[command(subcommand)]
         command: VersionsCommands,
+    },
+
+    #[command(about = "Snapshot management")]
+    Snapshot {
+        #[command(subcommand)]
+        command: SnapshotCommands,
+    },
+
+    #[command(about = "Configuration comparison")]
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommands,
     },
 }
 
@@ -125,6 +137,15 @@ pub enum VersionsCommands {
         #[arg(short = 'p', long)]
         path: String,
 
+        #[arg(long, help = "Filter to specific components (comma-separated)")]
+        component: Option<String>,
+
+        #[arg(long, help = "Warn on version downgrades")]
+        check_conflicts: bool,
+
+        #[arg(long, help = "Create a snapshot before applying")]
+        snapshot: bool,
+
         #[arg(long)]
         dry_run: bool,
     },
@@ -139,5 +160,51 @@ pub enum VersionsCommands {
 
         #[arg(name = "filter")]
         filter_vec: Vec<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SnapshotCommands {
+    #[command(about = "List all snapshots")]
+    List {
+        #[arg(short = 'p', long)]
+        path: String,
+    },
+
+    #[command(about = "Show snapshot details")]
+    Show {
+        id: String,
+
+        #[arg(short = 'p', long)]
+        path: String,
+    },
+
+    #[command(about = "Rollback to a snapshot")]
+    Rollback {
+        id: String,
+
+        #[arg(short = 'p', long)]
+        path: String,
+    },
+
+    #[command(about = "Delete a snapshot")]
+    Delete {
+        id: String,
+
+        #[arg(short = 'p', long)]
+        path: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ConfigCommands {
+    #[command(about = "Compare configuration files between directories")]
+    Diff {
+        source: String,
+
+        dest: String,
+
+        #[arg(short = 'f', long, help = "Filter to specific files (comma-separated)")]
+        file: Option<String>,
     },
 }

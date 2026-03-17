@@ -1,6 +1,7 @@
 //! Version data models.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
@@ -73,6 +74,203 @@ pub struct ContainerImageDiff {
     pub dest_tag: String,
     pub changed: bool,
 }
+
+// =============================================================================
+// APPLY OPTIONS
+// =============================================================================
+
+/// Options for version apply operation.
+#[derive(Debug, Clone, Default)]
+pub struct ApplyOptions {
+    pub components: Vec<String>,
+    pub dry_run: bool,
+    pub check_conflicts: bool,
+    pub create_snapshot: bool,
+}
+
+/// Result of version apply operation.
+#[derive(Debug, Clone, Default)]
+pub struct ApplyResult {
+    pub updated_files: Vec<PathBuf>,
+    pub skipped_files: Vec<PathBuf>,
+    pub conflicts: Vec<Conflict>,
+    pub snapshot_id: Option<String>,
+}
+
+/// Conflict detected during version apply.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Conflict {
+    pub component: String,
+    pub file: String,
+    pub kind: ConflictKind,
+    pub details: String,
+}
+
+/// Type of conflict.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ConflictKind {
+    VersionDowngrade {
+        chart_name: String,
+        from: String,
+        to: String,
+    },
+    ImageDowngrade {
+        image_name: String,
+        from: String,
+        to: String,
+    },
+    MissingInDest,
+    MissingInSource,
+}
+
+// =============================================================================
+// SNAPSHOT
+// =============================================================================
+
+/// Snapshot file containing all snapshots for a destination.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnapshotFile {
+    pub version: u32,
+    pub snapshots: Vec<Snapshot>,
+}
+
+impl Default for SnapshotFile {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            snapshots: Vec::new(),
+        }
+    }
+}
+
+/// A single promotion snapshot.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Snapshot {
+    pub id: String,
+    pub created_at: String,
+    pub source_path: String,
+    pub dest_path: String,
+    pub filters: Vec<String>,
+    pub version_changes: HashMap<String, Vec<FileVersionChange>>,
+    pub files_modified: Vec<String>,
+    pub status: SnapshotStatus,
+}
+
+impl Snapshot {
+    pub fn new(source_path: String, dest_path: String, filters: Vec<String>) -> Self {
+        let timestamp = time::OffsetDateTime::now_utc()
+            .format(
+                &time::format_description::parse("[year][month][day][hour][minute][second]")
+                    .unwrap(),
+            )
+            .unwrap_or_default();
+
+        Self {
+            id: format!("snap-{}", timestamp),
+            created_at: time::OffsetDateTime::now_utc()
+                .format(&time::format_description::well_known::Rfc3339)
+                .unwrap_or_default(),
+            source_path,
+            dest_path,
+            filters,
+            version_changes: HashMap::new(),
+            files_modified: Vec::new(),
+            status: SnapshotStatus::Applied,
+        }
+    }
+}
+
+/// File version change record.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileVersionChange {
+    pub file: String,
+    pub kind: VersionChangeKind,
+    pub name: String,
+    pub before: String,
+    pub after: String,
+}
+
+/// Kind of version change.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum VersionChangeKind {
+    HelmChart,
+    ContainerImage,
+}
+
+/// Snapshot status.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum SnapshotStatus {
+    Applied,
+    RolledBack,
+    Pending,
+}
+
+// =============================================================================
+// CONFIG DIFF
+// =============================================================================
+
+/// Configuration difference between two directories.
+#[derive(Debug, Clone)]
+pub struct ConfigDiff {
+    pub source_path: String,
+    pub dest_path: String,
+    pub file_diffs: Vec<FileConfigDiff>,
+}
+
+/// Configuration diff for a single file.
+#[derive(Debug, Clone)]
+pub struct FileConfigDiff {
+    pub relative_path: String,
+    pub hunks: Vec<DiffHunk>,
+    pub summary: DiffSummary,
+}
+
+/// A diff hunk (block of changes).
+#[derive(Debug, Clone)]
+pub struct DiffHunk {
+    pub old_start: usize,
+    pub new_start: usize,
+    pub lines: Vec<DiffLine>,
+}
+
+/// A single diff line.
+#[derive(Debug, Clone)]
+pub struct DiffLine {
+    pub kind: DiffLineKind,
+    pub content: String,
+    pub old_line: Option<usize>,
+    pub new_line: Option<usize>,
+}
+
+/// Kind of diff line.
+#[derive(Debug, Clone, Copy)]
+pub enum DiffLineKind {
+    Context,
+    Addition,
+    Removal,
+}
+
+/// Summary of changes in a file.
+#[derive(Debug, Clone, Default)]
+pub struct DiffSummary {
+    pub additions: usize,
+    pub removals: usize,
+    pub modifications: usize,
+}
+
+impl DiffSummary {
+    pub fn total(&self) -> usize {
+        self.additions + self.removals + self.modifications
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.total() == 0
+    }
+}
+
+// =============================================================================
+// LEGACY (for parsing)
+// =============================================================================
 
 /// Parsed kustomization.yaml helmCharts entry.
 #[derive(Debug, Clone, Deserialize)]

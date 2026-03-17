@@ -1,10 +1,19 @@
 [package]
 name = "promrail"
 version = "0.1.0"
-edition = "2021"
-authors = ["Agil"]
+edition = "2024"
+authors = ["Pando85 <pando855@gmail.com>"]
 description = "Git-native GitOps promotion tool"
-license = "MIT"
+license-file = "./LICENSE"
+homepage = "https://github.com/forkline/promrail"
+repository = "https://github.com/forkline/promrail"
+readme = "./README.md"
+categories = ["command-line-utilities"]
+keywords = ["gitops", "promotion", "kubernetes", "cli"]
+
+[[bin]]
+name = "promrail"
+path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive", "env"] }
@@ -29,3 +38,9 @@ tempfile = "3"
 
 [lints.rust]
 dead_code = "allow"
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+panic = "abort"
+strip = "symbols"

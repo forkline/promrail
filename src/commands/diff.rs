@@ -7,7 +7,7 @@ use tracing::{debug, info};
 use crate::config::Config;
 use crate::error::{AppResult, PromrailError};
 use crate::files::{FileDiscovery, FileSelector};
-use crate::git::{compute_diff, format_colored_diff, FileDiff, GitRepo};
+use crate::git::{FileDiff, GitRepo, compute_diff, format_colored_diff};
 
 pub struct DiffArgs {
     pub source: String,
@@ -88,17 +88,16 @@ pub fn execute(
     let protected = Vec::new();
 
     for file in &source_files.files {
-        if args.dest_based {
-            if let Some(parent) = file.parent() {
-                if !dest_subdirs.contains(parent) && !dest_set.iter().any(|f| f.starts_with(parent))
-                {
-                    debug!(
-                        "Skipping copy (dest-based, dir not in dest): {}",
-                        file.display()
-                    );
-                    continue;
-                }
-            }
+        if args.dest_based
+            && let Some(parent) = file.parent()
+            && !dest_subdirs.contains(parent)
+            && !dest_set.iter().any(|f| f.starts_with(parent))
+        {
+            debug!(
+                "Skipping copy (dest-based, dir not in dest): {}",
+                file.display()
+            );
+            continue;
         }
 
         let dest_file = dest_path.join(file);
@@ -142,13 +141,12 @@ pub fn execute(
 
         for file in &dest_files.files {
             if !source_set.contains(file) {
-                if args.dest_based {
-                    if let Some(parent) = file.parent() {
-                        if !source_subdirs.contains(parent) {
-                            debug!("Skipping deletion (dest-based): {}", file.display());
-                            continue;
-                        }
-                    }
+                if args.dest_based
+                    && let Some(parent) = file.parent()
+                    && !source_subdirs.contains(parent)
+                {
+                    debug!("Skipping deletion (dest-based): {}", file.display());
+                    continue;
                 }
 
                 info!("{}", style(format!("- {}", file.display())).red());

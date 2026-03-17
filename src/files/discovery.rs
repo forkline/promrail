@@ -53,10 +53,10 @@ impl FileDiscovery {
                 continue;
             }
 
-            if let Some(parent) = relative.parent() {
-                if parent != Path::new("") {
-                    dirs.insert(parent.to_path_buf());
-                }
+            if let Some(parent) = relative.parent()
+                && parent != Path::new("")
+            {
+                dirs.insert(parent.to_path_buf());
             }
 
             files.push(relative.to_path_buf());

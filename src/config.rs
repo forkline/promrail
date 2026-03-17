@@ -141,14 +141,14 @@ impl Config {
 
 mod shellexpand {
     pub fn full(s: &str) -> Result<std::borrow::Cow<'_, str>, ()> {
-        if s.starts_with("~") {
-            if let Some(home) = dirs::home_dir() {
-                return Ok(std::borrow::Cow::Owned(s.replacen(
-                    "~",
-                    &home.display().to_string(),
-                    1,
-                )));
-            }
+        if s.starts_with("~")
+            && let Some(home) = dirs::home_dir()
+        {
+            return Ok(std::borrow::Cow::Owned(s.replacen(
+                "~",
+                &home.display().to_string(),
+                1,
+            )));
         }
         Ok(std::borrow::Cow::Borrowed(s))
     }
