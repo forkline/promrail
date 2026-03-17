@@ -68,16 +68,14 @@ update-changelog:
 
 # Generate release artifacts
 release:
-    cargo vendor
-    tar -czf vendor.tar.gz vendor
-    cargo build --frozen --release --all-features --target {{CARGO_TARGET}}
+    cargo build --release --all-features --target {{CARGO_TARGET}}
     tar -czf {{PKG_BASE_NAME}}.tar.gz -C {{CARGO_TARGET_DIR}}/{{CARGO_TARGET}}/release promrail
     @echo "Released in {{CARGO_TARGET_DIR}}/{{CARGO_TARGET}}/release/promrail"
 
 # Clean build artifacts
 clean:
     cargo clean
-    rm -f vendor.tar.gz *.tar.gz
+    rm -f *.tar.gz
 
 # Show project info
 info:
