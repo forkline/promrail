@@ -96,6 +96,9 @@ pub enum Commands {
         #[arg(long)]
         include_protected: bool,
 
+        #[arg(long, help = "Allow promotion even with uncommitted changes")]
+        force: bool,
+
         #[arg(
             long,
             help = "Allow duplicate files across sources (default: error on duplicates)"
