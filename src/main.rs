@@ -248,23 +248,23 @@ fn handle_versions_command(command: VersionsCommands) -> AppResult<()> {
             // Merge with rules
             let result = versions::merge_versions(&sources, &config.rules)?;
 
-            // Output results
-            if explain {
-                println!("{}", versions::explain_merge(&result));
-            }
-
             // Show warnings
             for warning in &result.warnings {
                 warn!("{}", warning);
             }
 
-            // Save or print merged report
-            let json = serde_json::to_string_pretty(&result.report)?;
+            // Output explanation if requested
+            if explain {
+                println!("{}", versions::explain_merge(&result));
+            }
 
+            // Output JSON
             if let Some(output_path) = output {
+                let json = serde_json::to_string_pretty(&result.report)?;
                 std::fs::write(&output_path, &json)?;
                 info!("Written merged versions to {}", output_path);
-            } else {
+            } else if !explain {
+                let json = serde_json::to_string_pretty(&result.report)?;
                 println!("{}", json);
             }
 
