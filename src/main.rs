@@ -434,7 +434,7 @@ fn handle_repo_command(args: cli::Cli) -> AppResult<()> {
             commands::diff::execute(&config, &repo, &diff_args, true)?;
         }
         Commands::Promote {
-            source,
+            source_vec,
             dest,
             filter_vec,
             no_delete,
@@ -443,13 +443,15 @@ fn handle_repo_command(args: cli::Cli) -> AppResult<()> {
             yes,
             diff,
             include_protected,
+            allow_duplicates,
+            only_existing,
         } => {
             if config.git.require_clean_tree && !repo.is_clean()? {
                 return Err(error::PromrailError::DirtyTree);
             }
 
             let promote_args = commands::PromoteArgs {
-                source,
+                sources: source_vec,
                 dest,
                 filter: if filter_vec.is_empty() {
                     vec![".*".to_string()]
@@ -462,6 +464,8 @@ fn handle_repo_command(args: cli::Cli) -> AppResult<()> {
                 yes,
                 show_diff: diff,
                 include_protected,
+                allow_duplicates,
+                only_existing,
             };
             commands::promote::execute(&config, &repo, &promote_args)?;
         }

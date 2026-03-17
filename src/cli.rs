@@ -65,8 +65,12 @@ pub enum Commands {
 
     #[command(about = "Copy allowlisted files from source to destination")]
     Promote {
-        #[arg(short = 's', long)]
-        source: String,
+        #[arg(
+            short = 's',
+            long = "source",
+            help = "Source paths (can be specified multiple times for multi-source promotion)"
+        )]
+        source_vec: Vec<String>,
 
         #[arg(short = 'd', long)]
         dest: String,
@@ -91,6 +95,18 @@ pub enum Commands {
 
         #[arg(long)]
         include_protected: bool,
+
+        #[arg(
+            long,
+            help = "Allow duplicate files across sources (default: error on duplicates)"
+        )]
+        allow_duplicates: bool,
+
+        #[arg(
+            long,
+            help = "Only update components that already exist in destination"
+        )]
+        only_existing: bool,
     },
 
     #[command(about = "Validate configuration file")]
