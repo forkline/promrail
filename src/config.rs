@@ -1,4 +1,8 @@
 //! Configuration handling for promrail.
+//!
+//! Supports two config versions:
+//! - v1: Single repo with multiple environments
+//! - v2: Multiple standalone repos for cross-repo promotion
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -9,7 +13,9 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
     pub version: u32,
+    #[serde(default)]
     pub repos: HashMap<String, RepoConfig>,
+    #[serde(default)]
     pub default_repo: String,
     #[serde(default)]
     pub protected_dirs: Vec<String>,
@@ -29,6 +35,7 @@ pub struct Config {
 #[derive(Debug, Deserialize, Clone)]
 pub struct RepoConfig {
     pub path: String,
+    #[serde(default)]
     pub environments: HashMap<String, EnvironmentConfig>,
 }
 
@@ -39,6 +46,11 @@ impl RepoConfig {
             .map(|p| PathBuf::from(p.as_ref()))
             .unwrap_or_else(|_| PathBuf::from(&self.path))
     }
+
+    /// Check if this repo has environments defined (v1 style).
+    pub fn has_environments(&self) -> bool {
+        !self.environments.is_empty()
+    }
 }
 
 /// Environment configuration (staging, production, etc.).
@@ -47,7 +59,7 @@ pub struct EnvironmentConfig {
     pub path: String,
 }
 
-/// Delete behavior configuration (currently unused, delete is CLI-controlled).
+/// Delete behavior configuration.
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct DeleteConfig {
     #[serde(default)]
@@ -92,20 +104,17 @@ impl Config {
 
     /// Validate configuration consistency.
     pub fn validate(&self) -> crate::error::AppResult<()> {
-        if !self.repos.contains_key(&self.default_repo) {
+        if self.repos.is_empty() {
+            return Err(crate::error::PromrailError::ConfigInvalid(
+                "no repos defined".to_string(),
+            ));
+        }
+
+        if !self.default_repo.is_empty() && !self.repos.contains_key(&self.default_repo) {
             return Err(crate::error::PromrailError::ConfigInvalid(format!(
                 "default_repo '{}' not found in repos",
                 self.default_repo
             )));
-        }
-
-        for (name, repo) in &self.repos {
-            if repo.environments.is_empty() {
-                return Err(crate::error::PromrailError::ConfigInvalid(format!(
-                    "repo '{}' has no environments defined",
-                    name
-                )));
-            }
         }
 
         Ok(())
@@ -117,6 +126,16 @@ impl Config {
         self.repos
             .get_key_value(repo_name)
             .ok_or_else(|| crate::error::PromrailError::RepoNotFound(repo_name.to_string()))
+    }
+
+    /// Get first repo name (for single-repo configs).
+    pub fn first_repo(&self) -> Option<(&String, &RepoConfig)> {
+        self.repos.iter().next()
+    }
+
+    /// Check if using v2 style (standalone repos without environments).
+    pub fn is_v2_style(&self) -> bool {
+        self.repos.values().all(|r| r.environments.is_empty())
     }
 }
 

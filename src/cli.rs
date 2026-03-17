@@ -95,4 +95,49 @@ pub enum Commands {
 
     #[command(about = "Validate configuration file")]
     Validate {},
+
+    #[command(about = "Extract versions from a repository")]
+    Versions {
+        #[command(subcommand)]
+        command: VersionsCommands,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum VersionsCommands {
+    #[command(about = "Extract versions from a repository path")]
+    Extract {
+        #[arg(short = 'p', long)]
+        path: String,
+
+        #[arg(short = 'o', long)]
+        output: Option<String>,
+
+        #[arg(name = "filter")]
+        filter_vec: Vec<String>,
+    },
+
+    #[command(about = "Apply versions from a file to a repository")]
+    Apply {
+        #[arg(short = 'f', long)]
+        file: String,
+
+        #[arg(short = 'p', long)]
+        path: String,
+
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    #[command(about = "Compare versions between two repositories")]
+    Diff {
+        #[arg(short = 's', long)]
+        source: String,
+
+        #[arg(short = 'd', long)]
+        dest: String,
+
+        #[arg(name = "filter")]
+        filter_vec: Vec<String>,
+    },
 }

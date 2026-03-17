@@ -38,6 +38,9 @@ pub enum PromrailError {
     #[error("YAML error: {0}")]
     Yaml(#[from] serde_yaml::Error),
 
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
+
     #[error("Glob pattern error: {0}")]
     Glob(#[from] globset::Error),
 }
