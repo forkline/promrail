@@ -109,6 +109,25 @@ promrail snapshot rollback <id> --path ~/gitops/production
 promrail snapshot delete <id> --path ~/gitops/production
 ```
 
+### Multi-Source Merge
+
+Merge versions from multiple staging sources:
+
+```bash
+# Merge versions from multiple sources
+promrail versions merge \
+  --source ~/gitops/staging-homelab \
+  --source ~/gitops/staging-work \
+  --explain \
+  -o merged-versions.json
+
+# Apply merged versions
+promrail versions apply -f merged-versions.json \
+  --path ~/gitops/production --snapshot
+```
+
+See [AGENTS.md](AGENTS.md) for opencode AI assistant guidelines.
+
 ### Config Reference
 
 View configuration documentation directly in the CLI:
@@ -208,6 +227,47 @@ promrail promote --source staging --dest production --no-delete --yes
 # Dest-based: only delete if parent dir exists in source
 promrail promote --source staging --dest production --dest-based --yes
 ```
+
+### Promotion Rules
+
+For multi-source promotions, define rules in `promrail.yaml`:
+
+```yaml
+rules:
+  # Define sources with priorities
+  sources:
+    staging-homelab:
+      priority: 1
+      include: [platform/*, system/monitoring/*]
+      exclude: [platform/homeassistant/*]
+    staging-work:
+      priority: 2
+      include: [apps/*, system/auth/*]
+
+  # Conflict resolution
+  conflict_resolution:
+    version_strategy: highest  # highest | source_priority
+    source_order: [staging-work, staging-homelab]
+
+  # Component-level rules
+  components:
+    platform/postgres-operator:
+      action: always
+    platform/homeassistant:
+      action: never
+      notes: "Home-specific, not for work production"
+    system/auth/keycloak:
+      action: review
+      notes: "Check for env-specific configs"
+
+  # Global rules
+  global:
+    exclude: ["*/custom/*", "*/env/*"]
+    version_rules:
+      allow_downgrade: false
+```
+
+Actions: `always` (promote), `review` (flag for review), `never` (exclude).
 
 ## Architecture
 

@@ -633,3 +633,118 @@ promrail versions extract --path ~/gitops-apps/staging -o versions.json
 # Apply to destination repo
 promrail versions apply -f versions.json --path ~/gitops-infra/production
 ```
+
+## Multi-Source Promotion
+
+Promote from multiple staging sources to a single production environment.
+
+### Configuration
+
+Define promotion rules in `promrail.yaml`:
+
+```yaml
+rules:
+  sources:
+    staging-homelab:
+      priority: 1
+      description: "Homelab staging environment"
+      include:
+        - platform/*
+        - system/monitoring/*
+      exclude:
+        - platform/homeassistant/*
+
+    staging-work:
+      priority: 2
+      description: "Work staging environment"
+      include:
+        - apps/*
+        - system/auth/*
+
+  conflict_resolution:
+    version_strategy: highest
+    config_strategy: source_priority
+    source_order:
+      - staging-work
+      - staging-homelab
+
+  components:
+    platform/postgres-operator:
+      action: always
+    platform/homeassistant:
+      action: never
+      notes: "Home-specific"
+    system/auth/keycloak:
+      action: review
+      notes: "Check for env-specific configs"
+
+  global:
+    exclude:
+      - "*/custom/*"
+      - "*/env/*"
+    version_rules:
+      allow_downgrade: false
+      allow_prerelease: false
+```
+
+### Workflow
+
+```bash
+# 1. Merge versions from multiple sources
+promrail versions merge \
+  --source ~/gitops/staging-homelab \
+  --source ~/gitops/staging-work \
+  --explain \
+  -o merged-versions.json
+
+# 2. Review the merge output
+# - Check removed components
+# - Check warnings
+# - Check items needing review
+
+# 3. Apply merged versions
+promrail versions apply \
+  -f merged-versions.json \
+  --path ~/gitops/production \
+  --check-conflicts \
+  --snapshot
+
+# 4. Review and commit
+git diff
+git add -A
+git commit -m "promote: multi-source version updates"
+```
+
+### Automation Script
+
+Use the provided script for non-interactive promotion:
+
+```bash
+# Create sources file
+cat > sources.txt << EOF
+~/gitops/staging-homelab
+~/gitops/staging-work
+EOF
+
+# Run promotion
+./scripts/promote-complex.sh \
+  --sources sources.txt \
+  --dest ~/gitops/production
+
+# Dry run first
+./scripts/promote-complex.sh \
+  --sources sources.txt \
+  --dest ~/gitops/production \
+  --dry-run
+```
+
+### Opencode Integration
+
+When using opencode AI assistant, it will:
+
+1. Read `promrail.yaml` rules automatically
+2. Apply `action: always` without question
+3. Remove `action: never` components
+4. Flag `action: review` items for your attention
+
+See [AGENTS.md](../AGENTS.md) for guidelines.
