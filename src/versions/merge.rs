@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use tracing::{info, warn};
+use log::{info, warn};
 
 use crate::config::{PromotionAction, PromotionRules};
 use crate::error::AppResult;

@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use console::style;
-use tracing::debug;
+use log::debug;
 
 use crate::config::Config;
 use crate::error::{AppResult, PromrailError};

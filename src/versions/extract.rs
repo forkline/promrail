@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use tracing::info;
+use log::info;
 use walkdir::WalkDir;
 
 use crate::error::AppResult;
