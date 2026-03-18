@@ -75,10 +75,10 @@ fn main() {
 }
 
 fn run(args: Cli) -> AppResult<()> {
-    match args.command {
-        Commands::Versions { command } => handle_versions_command(command),
-        Commands::Snapshot { command } => handle_snapshot_command(command),
-        Commands::Config { command } => handle_config_command(command),
+    match args.command.clone() {
+        Some(Commands::Versions { command }) => handle_versions_command(command),
+        Some(Commands::Snapshot { command }) => handle_snapshot_command(command),
+        Some(Commands::Config { command }) => handle_config_command(command),
         _ => handle_repo_command(args),
     }
 }
@@ -413,24 +413,21 @@ fn handle_repo_command(args: cli::Cli) -> AppResult<()> {
 
     let repo = GitRepo::discover(&repo_path)?;
 
-    match args.command {
-        Commands::Diff {
-            source,
-            dest,
-            filter_vec,
-            no_delete,
-            dest_based,
-            include_protected,
-        } => {
-            // Resolve defaults from config
-            let source = source
+    match &args.command {
+        Some(Commands::Diff {}) => {
+            let source = args
+                .source_vec
+                .first()
+                .cloned()
                 .or_else(|| config.default_source.clone())
                 .ok_or_else(|| {
                     error::PromrailError::ConfigInvalid(
                         "no source specified and no default_source in config".to_string(),
                     )
                 })?;
-            let dest = dest
+            let dest = args
+                .dest
+                .clone()
                 .or_else(|| config.default_dest.clone())
                 .ok_or_else(|| {
                     error::PromrailError::ConfigInvalid(
@@ -441,83 +438,106 @@ fn handle_repo_command(args: cli::Cli) -> AppResult<()> {
             let diff_args = commands::DiffArgs {
                 source,
                 dest,
-                filter: if filter_vec.is_empty() {
+                filter: if args.filter_vec.is_empty() {
                     vec![".*".to_string()]
                 } else {
-                    filter_vec
+                    args.filter_vec.clone()
                 },
-                delete: !no_delete,
-                dest_based,
-                include_protected,
+                delete: !args.no_delete,
+                dest_based: args.dest_based,
+                include_protected: args.include_protected,
             };
             commands::diff::execute(&config, &repo, &diff_args, true, false)?;
         }
-        Commands::Promote {
-            source_vec,
-            dest,
-            filter_vec,
-            no_delete,
-            dest_based,
-            dry_run,
-            confirm,
-            diff,
-            include_protected,
-            force,
-            allow_duplicates,
-            only_existing,
-        } => {
-            if config.git.require_clean_tree && !force && !repo.is_clean()? {
+        Some(Commands::Promote {}) | None => {
+            let promote_args = build_promote_args(
+                &config,
+                args.source_vec.clone(),
+                args.dest.clone(),
+                args.filter_vec.clone(),
+                args.no_delete,
+                args.dest_based,
+                args.dry_run,
+                args.confirm,
+                args.diff,
+                args.include_protected,
+                args.force,
+                args.allow_duplicates,
+                args.only_existing,
+            )?;
+
+            if config.git.require_clean_tree && !promote_args.force && !repo.is_clean()? {
                 return Err(error::PromrailError::DirtyTree);
             }
 
-            // Resolve defaults from config
-            let sources = if source_vec.is_empty() {
-                config
-                    .default_source
-                    .clone()
-                    .map(|s| vec![s])
-                    .ok_or_else(|| {
-                        error::PromrailError::ConfigInvalid(
-                            "no source specified and no default_source in config".to_string(),
-                        )
-                    })?
-            } else {
-                source_vec
-            };
-            let dest = dest
-                .or_else(|| config.default_dest.clone())
-                .ok_or_else(|| {
-                    error::PromrailError::ConfigInvalid(
-                        "no dest specified and no default_dest in config".to_string(),
-                    )
-                })?;
-
-            let promote_args = commands::PromoteArgs {
-                sources,
-                dest,
-                filter: if filter_vec.is_empty() {
-                    vec![".*".to_string()]
-                } else {
-                    filter_vec
-                },
-                delete: !no_delete,
-                dest_based,
-                dry_run,
-                confirm,
-                show_diff: diff,
-                include_protected,
-                allow_duplicates,
-                only_existing,
-            };
             commands::promote::execute(&config, &repo, &promote_args)?;
         }
-        Commands::Validate {} => {
+        Some(Commands::Validate {}) => {
             commands::validate::execute(&config, &repo)?;
         }
-        Commands::Versions { .. } | Commands::Snapshot { .. } | Commands::Config { .. } => {
+        Some(Commands::Versions { .. })
+        | Some(Commands::Snapshot { .. })
+        | Some(Commands::Config { .. }) => {
             unreachable!()
         }
     }
 
     Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_promote_args(
+    config: &Config,
+    source_vec: Vec<String>,
+    dest: Option<String>,
+    filter_vec: Vec<String>,
+    no_delete: bool,
+    dest_based: bool,
+    dry_run: bool,
+    confirm: bool,
+    show_diff: bool,
+    include_protected: bool,
+    force: bool,
+    allow_duplicates: bool,
+    only_existing: bool,
+) -> AppResult<commands::PromoteArgs> {
+    let sources = if source_vec.is_empty() {
+        config
+            .default_source
+            .clone()
+            .map(|s| vec![s])
+            .ok_or_else(|| {
+                error::PromrailError::ConfigInvalid(
+                    "no source specified and no default_source in config".to_string(),
+                )
+            })?
+    } else {
+        source_vec
+    };
+    let dest = dest
+        .or_else(|| config.default_dest.clone())
+        .ok_or_else(|| {
+            error::PromrailError::ConfigInvalid(
+                "no dest specified and no default_dest in config".to_string(),
+            )
+        })?;
+
+    Ok(commands::PromoteArgs {
+        sources,
+        dest,
+        filter: if filter_vec.is_empty() {
+            vec![".*".to_string()]
+        } else {
+            filter_vec
+        },
+        delete: !no_delete,
+        dest_based,
+        dry_run,
+        confirm,
+        show_diff,
+        include_protected,
+        allow_duplicates,
+        only_existing,
+        force,
+    })
 }

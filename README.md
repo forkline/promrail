@@ -2,7 +2,7 @@
   <br>
   <img src="assets/logo.svg" alt="logo" width="200">
   <br>
-  Promrail
+  prl
   <br>
   <br>
 </h1>
@@ -16,6 +16,7 @@ Git-native GitOps promotion tool written in Rust.
 
 ## Features
 
+- **Simple CLI**: `prl` is the default promote command - just run it!
 - **Multi-repository support**: Configure multiple GitOps repositories with different structures
 - **Allowlist-based file selection**: Only promote explicitly allowed files
 - **Protected directories**: Never modify `custom/`, `env/`, `local/` directories
@@ -31,19 +32,19 @@ Git-native GitOps promotion tool written in Rust.
 ### Cargo
 
 ```bash
-cargo install promrail
+cargo install prl
 ```
 
 ### Arch Linux
 
 ```bash
-yay -S promrail
+yay -S prl
 ```
 
 or the binary from AUR:
 
 ```bash
-yay -S promrail-bin
+yay -S prl-bin
 ```
 
 ### Binaries
@@ -61,7 +62,7 @@ curl -s https://api.github.com/repos/forkline/promrail/releases/latest \
   | cut -d '"' -f 4 \
   | xargs curl -L \
   | tar xvz
-sudo mv promrail /usr/local/bin
+sudo mv prl /usr/local/bin
 ```
 
 ## Quick Start
@@ -70,42 +71,45 @@ sudo mv promrail /usr/local/bin
 
 ```bash
 # Generate example config
-promrail config example > promrail.yaml
+prl config example > promrail.yaml
 ```
 
 Or see all configuration options:
 
 ```bash
-promrail config show
+prl config show
 ```
 
 2. Validate your configuration:
 
 ```bash
-promrail validate
+prl validate
 ```
 
 3. Preview changes:
 
 ```bash
 # Diff all files
-promrail diff --source staging --dest production
+prl diff --source staging --dest production
 
 # Filter by path
-promrail diff --source staging --dest production platform/redis-operator
+prl diff --source staging --dest production platform/redis-operator
 ```
 
-4. Promote (applies changes by default, use `--confirm` to prompt):
+4. Promote (default command, applies changes immediately):
 
 ```bash
-# Dry run first
-promrail promote --source staging --dest production --dry-run
+# With defaults configured, just run:
+prl
 
-# Actually promote
-promrail promote --source staging --dest production
+# Or with explicit options:
+prl --source staging --dest production
+
+# Dry run first
+prl --dry-run
 
 # With confirmation prompt
-promrail promote --source staging --dest production --confirm
+prl --confirm
 ```
 
 ## Commands
@@ -125,16 +129,16 @@ Extract and apply Helm chart versions and container image tags:
 
 ```bash
 # Extract versions from a repository
-promrail versions extract --path ~/gitops/staging -o versions.json
+prl versions extract --path ~/gitops/staging -o versions.json
 
 # Apply versions to another environment
-promrail versions apply -f versions.json --path ~/gitops/production
+prl versions apply -f versions.json --path ~/gitops/production
 
 # Compare versions between environments
-promrail versions diff --source ~/gitops/staging --dest ~/gitops/production
+prl versions diff --source ~/gitops/staging --dest ~/gitops/production
 
 # Apply with conflict detection and snapshot
-promrail versions apply -f versions.json --path ~/gitops/production \
+prl versions apply -f versions.json --path ~/gitops/production \
   --check-conflicts --snapshot
 ```
 
@@ -144,16 +148,16 @@ Create restore points before applying changes:
 
 ```bash
 # List snapshots
-promrail snapshot list --path ~/gitops/production
+prl snapshot list --path ~/gitops/production
 
 # Show snapshot details
-promrail snapshot show <id> --path ~/gitops/production
+prl snapshot show <id> --path ~/gitops/production
 
 # Rollback to a snapshot
-promrail snapshot rollback <id> --path ~/gitops/production
+prl snapshot rollback <id> --path ~/gitops/production
 
 # Delete a snapshot
-promrail snapshot delete <id> --path ~/gitops/production
+prl snapshot delete <id> --path ~/gitops/production
 ```
 
 ### Multi-Source Merge
@@ -162,14 +166,14 @@ Merge versions from multiple staging sources:
 
 ```bash
 # Merge versions from multiple sources
-promrail versions merge \
+prl versions merge \
   --source ~/gitops/staging-homelab \
   --source ~/gitops/staging-work \
   --explain \
   -o merged-versions.json
 
 # Apply merged versions
-promrail versions apply -f merged-versions.json \
+prl versions apply -f merged-versions.json \
   --path ~/gitops/production --snapshot
 ```
 
@@ -181,13 +185,13 @@ View configuration documentation directly in the CLI:
 
 ```bash
 # Show all configuration options
-promrail config show
+prl config show
 
 # Generate example configuration
-promrail config example > promrail.yaml
+prl config example > promrail.yaml
 
 # Generate to a file
-promrail config example -o promrail.yaml
+prl config example -o promrail.yaml
 ```
 
 ## Options
@@ -213,7 +217,7 @@ promrail config example -o promrail.yaml
 
 ## Configuration
 
-Run `promrail config show` for embedded documentation, or `promrail config example` for a sample config file.
+Run `prl config show` for embedded documentation, or `prl config example` for a sample config file.
 
 ### Simple Single-Repo Config
 
@@ -226,7 +230,7 @@ environments:
   staging: { path: clusters/staging }
   production: { path: clusters/production }
 
-# Optional: enables `promrail promote` without args
+# Optional: enables `prl promote` without args
 default_source: staging
 default_dest: production
 
@@ -245,9 +249,9 @@ Usage:
 
 ```bash
 # All equivalent when defaults are set:
-promrail promote
-promrail promote --no-delete
-promrail promote --source staging --dest production
+prl promote
+prl promote --no-delete
+prl promote --source staging --dest production
 ```
 
 ### Multi-Repo Config
@@ -299,17 +303,17 @@ protected_dirs:
 
 ### Delete Behavior
 
-By default, promrail deletes files in destination that don't exist in source (matching the Python promote script):
+By default, prl deletes files in destination that don't exist in source (matching the Python promote script):
 
 ```bash
 # Default: delete extra files in destination
-promrail promote --source staging --dest production
+prl promote --source staging --dest production
 
 # Keep extra files with --no-delete
-promrail promote --source staging --dest production --no-delete
+prl promote --source staging --dest production --no-delete
 
 # Dest-based: only delete if parent dir exists in source
-promrail promote --source staging --dest production --dest-based
+prl promote --source staging --dest production --dest-based
 ```
 
 ### Promotion Rules
@@ -363,7 +367,7 @@ See [docs/adr-001-architecture.md](docs/adr-001-architecture.md) for design deci
 - [Workflows & Secrets](docs/workflows.md) - CI/CD setup and secrets
 - [Architecture Decision Record](docs/adr-001-architecture.md) - Design decisions
 - [AGENTS.md](AGENTS.md) - Opencode AI assistant guidelines
-- `promrail config show` - Embedded configuration reference
+- `prl config show` - Embedded configuration reference
 
 ## Development
 

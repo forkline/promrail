@@ -267,6 +267,12 @@ pub struct PromoteOptions {
     #[config_doc(default = "false")]
     #[serde(default)]
     pub only_existing: bool,
+
+    /// Do not delete extra files in destination.
+    /// When true, files in destination that don't exist in source are kept.
+    #[config_doc(default = "false")]
+    #[serde(default)]
+    pub no_delete: bool,
 }
 
 /// Version change rules.

@@ -23,12 +23,14 @@ impl std::fmt::Display for LogLevel {
 }
 
 #[derive(Debug, Parser)]
-#[command(name = "promrail")]
+#[command(name = "prl")]
 #[command(about = "Git-native GitOps promotion tool", long_about = None)]
 #[command(version)]
+#[command(subcommand_required = false)]
+#[command(subcommand_precedence_over_arg = false)]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Commands,
+    pub command: Option<Commands>,
 
     #[arg(short, long, global = true, env = "PROMRAIL_CONFIG")]
     pub config: Option<String>,
@@ -38,91 +40,78 @@ pub struct Cli {
 
     #[arg(short, long, global = true, value_enum, default_value = "info")]
     pub log_level: LogLevel,
+
+    // Promote args (used when no subcommand)
+    #[arg(
+        short = 's',
+        long = "source",
+        global = true,
+        help = "Source environment (uses default_source if not set)"
+    )]
+    pub source_vec: Vec<String>,
+
+    #[arg(
+        short = 'd',
+        long = "dest",
+        global = true,
+        help = "Destination environment (uses default_dest if not set)"
+    )]
+    pub dest: Option<String>,
+
+    #[arg(name = "filter", global = true)]
+    pub filter_vec: Vec<String>,
+
+    #[arg(long, global = true, help = "Do not delete extra files in destination")]
+    pub no_delete: bool,
+
+    #[arg(long, global = true)]
+    pub dest_based: bool,
+
+    #[arg(long, global = true)]
+    pub dry_run: bool,
+
+    #[arg(
+        long,
+        global = true,
+        help = "Ask for confirmation before applying changes"
+    )]
+    pub confirm: bool,
+
+    #[arg(long, global = true)]
+    pub diff: bool,
+
+    #[arg(long, global = true)]
+    pub include_protected: bool,
+
+    #[arg(
+        long,
+        global = true,
+        help = "Allow promotion even with uncommitted changes"
+    )]
+    pub force: bool,
+
+    #[arg(
+        long,
+        global = true,
+        help = "Allow duplicate files across sources (default: error on duplicates)"
+    )]
+    pub allow_duplicates: bool,
+
+    #[arg(
+        long,
+        global = true,
+        help = "Only update components that already exist in destination"
+    )]
+    pub only_existing: bool,
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Debug, Clone, Subcommand)]
 pub enum Commands {
     #[command(about = "Show what would change without applying")]
-    Diff {
-        #[arg(
-            short = 's',
-            long,
-            help = "Source environment (uses default_source if not set)"
-        )]
-        source: Option<String>,
+    Diff {},
 
-        #[arg(
-            short = 'd',
-            long,
-            help = "Destination environment (uses default_dest if not set)"
-        )]
-        dest: Option<String>,
-
-        #[arg(name = "filter")]
-        filter_vec: Vec<String>,
-
-        #[arg(long, help = "Do not delete extra files in destination")]
-        no_delete: bool,
-
-        #[arg(long)]
-        dest_based: bool,
-
-        #[arg(long)]
-        include_protected: bool,
-    },
-
-    #[command(about = "Copy allowlisted files from source to destination")]
-    Promote {
-        #[arg(
-            short = 's',
-            long = "source",
-            help = "Source environment (uses default_source if not set)"
-        )]
-        source_vec: Vec<String>,
-
-        #[arg(
-            short = 'd',
-            long,
-            help = "Destination environment (uses default_dest if not set)"
-        )]
-        dest: Option<String>,
-
-        #[arg(name = "filter")]
-        filter_vec: Vec<String>,
-
-        #[arg(long, help = "Do not delete extra files in destination")]
-        no_delete: bool,
-
-        #[arg(long)]
-        dest_based: bool,
-
-        #[arg(long)]
-        dry_run: bool,
-
-        #[arg(long, help = "Ask for confirmation before applying changes")]
-        confirm: bool,
-
-        #[arg(long)]
-        diff: bool,
-
-        #[arg(long)]
-        include_protected: bool,
-
-        #[arg(long, help = "Allow promotion even with uncommitted changes")]
-        force: bool,
-
-        #[arg(
-            long,
-            help = "Allow duplicate files across sources (default: error on duplicates)"
-        )]
-        allow_duplicates: bool,
-
-        #[arg(
-            long,
-            help = "Only update components that already exist in destination"
-        )]
-        only_existing: bool,
-    },
+    #[command(about = "Copy allowlisted files from source to destination (default)")]
+    Promote {},
 
     #[command(about = "Validate configuration file")]
     Validate {},
@@ -146,7 +135,7 @@ pub enum Commands {
     },
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Debug, Clone, Subcommand)]
 pub enum VersionsCommands {
     #[command(about = "Extract versions from a repository path")]
     Extract {
@@ -214,7 +203,7 @@ pub enum VersionsCommands {
     },
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Debug, Clone, Subcommand)]
 pub enum SnapshotCommands {
     #[command(about = "List all snapshots")]
     List {
@@ -247,7 +236,7 @@ pub enum SnapshotCommands {
     },
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Debug, Clone, Subcommand)]
 pub enum ConfigCommands {
     #[command(about = "Show configuration reference with all options")]
     Show {},
