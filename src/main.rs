@@ -2,8 +2,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use console::style;
-use tracing::{info, warn};
-use tracing_subscriber::EnvFilter;
+use log::{info, warn};
 
 mod cli;
 mod commands;
@@ -11,6 +10,7 @@ mod config;
 mod error;
 mod files;
 mod git;
+mod logger;
 mod versions;
 
 use cli::{Cli, Commands, ConfigCommands, LogLevel, SnapshotCommands, VersionsCommands};
@@ -19,19 +19,15 @@ use error::AppResult;
 use git::GitRepo;
 
 fn setup_logging(level: LogLevel) {
-    let filter = match level {
-        LogLevel::Error => EnvFilter::new("error"),
-        LogLevel::Warn => EnvFilter::new("warn"),
-        LogLevel::Info => EnvFilter::new("info"),
-        LogLevel::Debug => EnvFilter::new("debug"),
-        LogLevel::Trace => EnvFilter::new("trace"),
+    let verbosity = match level {
+        LogLevel::Error => 0,
+        LogLevel::Warn => 0,
+        LogLevel::Info => 0,
+        LogLevel::Debug => 1,
+        LogLevel::Trace => 2,
     };
 
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_target(false)
-        .without_time()
-        .init();
+    logger::setup_logging(verbosity).expect("Failed to initialize logger");
 }
 
 fn find_config_path(config_arg: Option<&str>) -> AppResult<PathBuf> {

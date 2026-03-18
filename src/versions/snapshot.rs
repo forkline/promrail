@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use tracing::{info, warn};
+use log::{info, warn};
 
 use crate::error::AppResult;
 use crate::versions::models::{

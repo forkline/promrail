@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-use tracing::{info, warn};
+use log::{info, warn};
 
 use crate::commands::diff::{self, DiffArgs};
 use crate::config::{Config, PromotionAction};
