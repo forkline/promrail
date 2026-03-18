@@ -3,7 +3,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use console::style;
-use log::{info, warn};
+use log::{debug, info, warn};
 
 use crate::commands::diff::{self, DiffArgs};
 use crate::commands::{default_filter, print_promotion_summary};
@@ -110,6 +110,11 @@ pub fn execute(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> AppResult
     let is_multi_source = args.sources.len() > 1;
 
     if is_multi_source {
+        info!(
+            "Multi-source promotion from {} sources to {}",
+            args.sources.len(),
+            args.dest
+        );
         execute_multi_source(config, repo, args)
     } else {
         execute_single_source(config, repo, args)
@@ -231,17 +236,18 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
     let discovery = FileDiscovery::new(selector);
 
     // Collect all files from all sources
-    let mut all_files: HashMap<PathBuf, (String, PathBuf)> = HashMap::new(); // relative -> (source_name, absolute)
-    let mut duplicates: Vec<(PathBuf, Vec<String>)> = Vec::new(); // (file, [sources])
+    let mut all_files: HashMap<PathBuf, (String, PathBuf)> = HashMap::new();
+    let mut duplicates: Vec<(PathBuf, Vec<String>)> = Vec::new();
 
     for (source_name, source_path) in &source_paths {
+        debug!("Discovering files in: {}", source_path.display());
         let discovered = discovery.discover(source_path, &args.filter, args.include_protected)?;
+        debug!("  Found {} files", discovered.files.len());
 
         for file in &discovered.files {
-            let relative = match file.strip_prefix(source_path) {
-                Ok(r) => r.to_path_buf(),
-                Err(_) => continue,
-            };
+            // file is already a relative path from discover()
+            let relative = file.clone();
+            let absolute = source_path.join(&relative);
 
             // Check if this file is in a protected directory
             if is_protected(&relative, &config.protected_dirs) && !args.include_protected {
@@ -282,7 +288,7 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
                     duplicates.push((relative.clone(), vec![existing, source_name.clone()]));
                 }
             } else {
-                all_files.insert(relative.clone(), (source_name.clone(), file.clone()));
+                all_files.insert(relative.clone(), (source_name.clone(), absolute));
             }
         }
     }
@@ -318,10 +324,8 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
     let all_relative: HashSet<PathBuf> = all_files.keys().cloned().collect();
 
     for file in &dest_discovered.files {
-        let relative = match file.strip_prefix(&dest_path) {
-            Ok(r) => r.to_path_buf(),
-            Err(_) => continue,
-        };
+        // file is already relative from discover()
+        let relative = file.clone();
 
         if is_protected(&relative, &config.protected_dirs) {
             continue;
@@ -336,18 +340,28 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
     let total_copies = all_files.len();
     let total_deletes = files_to_delete.len();
 
+    println!("Comparing multi-source -> {}", args.dest);
+    println!();
+
     if total_copies == 0 && total_deletes == 0 {
-        info!("No changes to promote");
+        println!("No changes to promote");
         return Ok(());
     }
 
-    info!(
-        "Changes: {} files to copy, {} files to delete",
-        total_copies, total_deletes
-    );
+    for relative in all_files.keys() {
+        println!("~ {}", relative.display());
+    }
+
+    println!();
+    println!("Summary:");
+    println!("  {} files to copy", style(total_copies).green());
+    if should_delete && total_deletes > 0 {
+        println!("  {} files to delete", style(total_deletes).red());
+    }
 
     if args.dry_run {
-        info!("Dry run complete. No files were modified.");
+        println!();
+        println!("Dry run complete. No files were modified.");
         return Ok(());
     }
 
