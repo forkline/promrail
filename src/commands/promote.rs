@@ -107,9 +107,11 @@ fn confirm_prompt(prompt: &str) -> AppResult<bool> {
 }
 
 pub fn execute(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> AppResult<()> {
-    let is_multi_source = args.sources.len() > 1;
+    let source = &args.sources[0];
+    let is_cross_repo =
+        config.repos.contains_key(source) && !config.get_environments().contains_key(source);
 
-    if is_multi_source {
+    if args.sources.len() > 1 || is_cross_repo {
         info!(
             "Multi-source promotion from {} sources to {}",
             args.sources.len(),
@@ -340,7 +342,11 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
     let total_copies = all_files.len();
     let total_deletes = files_to_delete.len();
 
-    println!("Comparing multi-source -> {}", args.dest);
+    if args.sources.len() == 1 {
+        println!("Comparing {} -> {}", args.sources[0], args.dest);
+    } else {
+        println!("Comparing {} sources -> {}", args.sources.len(), args.dest);
+    }
     println!();
 
     if total_copies == 0 && total_deletes == 0 {
@@ -365,7 +371,13 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
         return Ok(());
     }
 
-    if args.confirm && !confirm_prompt("Proceed with multi-source promotion?")? {
+    let prompt_msg = if args.sources.len() == 1 {
+        format!("Proceed with promotion from {}?", args.sources[0])
+    } else {
+        "Proceed with multi-source promotion?".to_string()
+    };
+
+    if args.confirm && !confirm_prompt(&prompt_msg)? {
         info!("Promotion cancelled");
         return Ok(());
     }
@@ -410,7 +422,11 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
     save_multi_source_snapshot(&dest_path, &snapshot_id, &all_files, &files_to_delete)?;
 
     println!();
-    println!("{}", style("Multi-source promotion complete!").bold());
+    if args.sources.len() == 1 {
+        println!("{}", style("Promotion complete!").bold());
+    } else {
+        println!("{}", style("Multi-source promotion complete!").bold());
+    }
     print_promotion_summary(total_copies, total_deletes, should_delete);
 
     if config.audit.enabled {
