@@ -30,6 +30,7 @@ pub fn execute(
     repo: &GitRepo,
     args: &DiffArgs,
     show_diff: bool,
+    quiet_summary: bool,
 ) -> AppResult<PromotionResult> {
     let (_, repo_config) = config.get_repo(None)?;
 
@@ -157,12 +158,14 @@ pub fn execute(
     }
 
     println!();
-    println!("Summary:");
-    println!("  {} files to copy", style(copied.len()).green());
-    if args.delete {
-        println!("  {} files to delete", style(deleted.len()).red());
+    if !quiet_summary {
+        println!("Summary:");
+        println!("  {} files to copy", style(copied.len()).green());
+        if args.delete {
+            println!("  {} files to delete", style(deleted.len()).red());
+        }
+        println!();
     }
-    println!();
 
     Ok(PromotionResult {
         copied,

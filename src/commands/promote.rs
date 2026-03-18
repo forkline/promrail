@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+use console::style;
 use log::{info, warn};
 
 use crate::commands::diff::{self, DiffArgs};
@@ -66,7 +67,7 @@ fn execute_single_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) ->
         include_protected: args.include_protected,
     };
 
-    let result = diff::execute(config, repo, &diff_args, args.show_diff)?;
+    let result = diff::execute(config, repo, &diff_args, args.show_diff, true)?;
 
     if result.copied.is_empty() && result.deleted.is_empty() {
         info!("No changes to promote");
@@ -98,21 +99,37 @@ fn execute_single_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) ->
         let dest_file = dest_path.join(&file_diff.path);
 
         repo.copy_file(&source_file, &dest_file)?;
-        info!("Copied: {}", file_diff.path.display());
+        println!(
+            "{}",
+            style(format!("Copied: {}", file_diff.path.display())).green()
+        );
     }
 
     if args.delete {
         for file in &result.deleted {
             let dest_file = dest_path.join(file);
             repo.delete_file(&dest_file)?;
-            info!("Deleted: {}", file.display());
+            println!("{}", style(format!("Deleted: {}", file.display())).red());
         }
     }
 
-    info!("Promotion complete!");
-    info!("  {} files copied", result.copied.len());
-    if args.delete {
-        info!("  {} files deleted", result.deleted.len());
+    println!();
+    println!("{}", style("Promotion complete!").bold());
+    let copied_count = result.copied.len();
+    let deleted_count = result.deleted.len();
+
+    if copied_count == 1 {
+        println!("  1 file copied");
+    } else {
+        println!("  {} files copied", style(copied_count).green());
+    }
+
+    if args.delete && deleted_count > 0 {
+        if deleted_count == 1 {
+            println!("  1 file deleted");
+        } else {
+            println!("  {} files deleted", style(deleted_count).red());
+        }
     }
 
     if config.audit.enabled {
@@ -310,8 +327,6 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
     info!("Created snapshot: {}", snapshot_id);
 
     // Apply changes
-    info!("Applying changes...");
-
     for (relative, (source_name, source_file)) in &all_files {
         let dest_file = dest_path.join(relative);
 
@@ -325,25 +340,45 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
         }
 
         std::fs::copy(source_file, &dest_file)?;
-        info!("Copied: {} (from {})", relative.display(), source_name);
+        println!(
+            "{}",
+            style(format!(
+                "Copied: {} (from {})",
+                relative.display(),
+                source_name
+            ))
+            .green()
+        );
     }
 
     if args.delete {
         for relative in &files_to_delete {
             let dest_file = dest_path.join(relative);
             std::fs::remove_file(&dest_file)?;
-            info!("Deleted: {}", relative.display());
+            println!(
+                "{}",
+                style(format!("Deleted: {}", relative.display())).red()
+            );
         }
-    }
-
-    info!("Multi-source promotion complete!");
-    info!("  {} files copied", total_copies);
-    if args.delete {
-        info!("  {} files deleted", total_deletes);
     }
 
     // Save snapshot
     save_multi_source_snapshot(&dest_path, &snapshot_id, &all_files, &files_to_delete)?;
+
+    println!();
+    println!("{}", style("Multi-source promotion complete!").bold());
+    if total_copies == 1 {
+        println!("  1 file copied");
+    } else {
+        println!("  {} files copied", style(total_copies).green());
+    }
+    if args.delete && total_deletes > 0 {
+        if total_deletes == 1 {
+            println!("  1 file deleted");
+        } else {
+            println!("  {} files deleted", style(total_deletes).red());
+        }
+    }
 
     if config.audit.enabled {
         let result = diff::PromotionResult {
