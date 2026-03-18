@@ -32,21 +32,31 @@ pub fn execute(
     show_diff: bool,
     quiet_summary: bool,
 ) -> AppResult<PromotionResult> {
-    let (_, repo_config) = config.get_repo(None)?;
+    let environments = config.get_environments();
 
-    let source_env = repo_config.environments.get(&args.source).ok_or_else(|| {
-        PromrailError::EnvironmentNotFound {
-            repo: config.default_repo.clone(),
-            env: args.source.clone(),
-        }
-    })?;
+    let source_env =
+        environments
+            .get(&args.source)
+            .ok_or_else(|| PromrailError::EnvironmentNotFound {
+                repo: if config.is_single_repo() {
+                    "default".to_string()
+                } else {
+                    config.default_repo.clone()
+                },
+                env: args.source.clone(),
+            })?;
 
-    let dest_env = repo_config.environments.get(&args.dest).ok_or_else(|| {
-        PromrailError::EnvironmentNotFound {
-            repo: config.default_repo.clone(),
-            env: args.dest.clone(),
-        }
-    })?;
+    let dest_env =
+        environments
+            .get(&args.dest)
+            .ok_or_else(|| PromrailError::EnvironmentNotFound {
+                repo: if config.is_single_repo() {
+                    "default".to_string()
+                } else {
+                    config.default_repo.clone()
+                },
+                env: args.dest.clone(),
+            })?;
 
     if args.source == args.dest {
         return Err(PromrailError::SameEnvironment(args.source.clone()));

@@ -422,6 +422,22 @@ fn handle_repo_command(args: cli::Cli) -> AppResult<()> {
             dest_based,
             include_protected,
         } => {
+            // Resolve defaults from config
+            let source = source
+                .or_else(|| config.default_source.clone())
+                .ok_or_else(|| {
+                    error::PromrailError::ConfigInvalid(
+                        "no source specified and no default_source in config".to_string(),
+                    )
+                })?;
+            let dest = dest
+                .or_else(|| config.default_dest.clone())
+                .ok_or_else(|| {
+                    error::PromrailError::ConfigInvalid(
+                        "no dest specified and no default_dest in config".to_string(),
+                    )
+                })?;
+
             let diff_args = commands::DiffArgs {
                 source,
                 dest,
@@ -454,8 +470,30 @@ fn handle_repo_command(args: cli::Cli) -> AppResult<()> {
                 return Err(error::PromrailError::DirtyTree);
             }
 
+            // Resolve defaults from config
+            let sources = if source_vec.is_empty() {
+                config
+                    .default_source
+                    .clone()
+                    .map(|s| vec![s])
+                    .ok_or_else(|| {
+                        error::PromrailError::ConfigInvalid(
+                            "no source specified and no default_source in config".to_string(),
+                        )
+                    })?
+            } else {
+                source_vec
+            };
+            let dest = dest
+                .or_else(|| config.default_dest.clone())
+                .ok_or_else(|| {
+                    error::PromrailError::ConfigInvalid(
+                        "no dest specified and no default_dest in config".to_string(),
+                    )
+                })?;
+
             let promote_args = commands::PromoteArgs {
-                sources: source_vec,
+                sources,
                 dest,
                 filter: if filter_vec.is_empty() {
                     vec![".*".to_string()]
