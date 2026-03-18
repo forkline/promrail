@@ -575,7 +575,7 @@ allowlist:
 # Recommended: charts (Helm chart dependencies, managed by helm)
 denylist:
   - "**/*secret*"
-  - "charts"
+  - "**/charts/**"
 
 # Delete behavior configuration
 delete:

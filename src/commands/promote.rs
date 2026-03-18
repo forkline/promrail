@@ -2,7 +2,6 @@ use std::collections::{HashMap, HashSet};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-use console::style;
 use tracing::{info, warn};
 
 use crate::commands::diff::{self, DiffArgs};
@@ -99,14 +98,14 @@ fn execute_single_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) ->
         let dest_file = dest_path.join(&file_diff.path);
 
         repo.copy_file(&source_file, &dest_file)?;
-        info!("Copied: {}", style(&file_diff.path.display()).green());
+        info!("Copied: {}", file_diff.path.display());
     }
 
     if args.delete {
         for file in &result.deleted {
             let dest_file = dest_path.join(file);
             repo.delete_file(&dest_file)?;
-            info!("Deleted: {}", style(file.display()).red());
+            info!("Deleted: {}", file.display());
         }
     }
 
@@ -308,7 +307,7 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
 
     // Create snapshot before applying changes
     let snapshot_id = create_multi_source_snapshot(&dest_path)?;
-    info!("Created snapshot: {}", style(&snapshot_id).cyan());
+    info!("Created snapshot: {}", snapshot_id);
 
     // Apply changes
     info!("Applying changes...");
@@ -326,18 +325,14 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
         }
 
         std::fs::copy(source_file, &dest_file)?;
-        info!(
-            "Copied: {} (from {})",
-            style(relative.display()).green(),
-            style(source_name).dim()
-        );
+        info!("Copied: {} (from {})", relative.display(), source_name);
     }
 
     if args.delete {
         for relative in &files_to_delete {
             let dest_file = dest_path.join(relative);
             std::fs::remove_file(&dest_file)?;
-            info!("Deleted: {}", style(relative.display()).red());
+            info!("Deleted: {}", relative.display());
         }
     }
 
