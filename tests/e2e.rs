@@ -139,14 +139,14 @@ audit:
     }
 
     fn run_promrail(&self, args: &[&str]) -> (bool, String, String) {
-        let binary = env!("CARGO_BIN_EXE_promrail");
+        let binary = env!("CARGO_BIN_EXE_prl");
 
         let mut cmd = Command::new(binary);
         cmd.args(args)
             .current_dir(&self.repo_path)
             .env("PROMRAIL_CONFIG", &self.config_path);
 
-        let output = cmd.output().expect("Failed to run promrail");
+        let output = cmd.output().expect("Failed to run prl");
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();

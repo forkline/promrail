@@ -23,6 +23,7 @@ pub struct PromoteArgs {
     pub include_protected: bool,
     pub allow_duplicates: bool,
     pub only_existing: bool,
+    pub force: bool,
 }
 
 pub fn execute(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> AppResult<()> {
@@ -38,6 +39,8 @@ pub fn execute(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> AppResult
 fn execute_single_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> AppResult<()> {
     let source = &args.sources[0];
     let environments = config.get_environments();
+
+    let should_delete = args.delete && !config.rules.global.promote_options.no_delete;
 
     let source_env =
         environments
@@ -70,7 +73,7 @@ fn execute_single_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) ->
         source: source.clone(),
         dest: args.dest.clone(),
         filter: args.filter.clone(),
-        delete: args.delete,
+        delete: should_delete,
         dest_based: args.dest_based,
         include_protected: args.include_protected,
     };
@@ -113,7 +116,7 @@ fn execute_single_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) ->
         );
     }
 
-    if args.delete {
+    if should_delete {
         for file in &result.deleted {
             let dest_file = dest_path.join(file);
             repo.delete_file(&dest_file)?;
@@ -132,7 +135,7 @@ fn execute_single_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) ->
         println!("  {} files copied", style(copied_count).green());
     }
 
-    if args.delete && deleted_count > 0 {
+    if should_delete && deleted_count > 0 {
         if deleted_count == 1 {
             println!("  1 file deleted");
         } else {
@@ -368,7 +371,7 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
         );
     }
 
-    if args.delete {
+    if args.delete && !config.rules.global.promote_options.no_delete {
         for relative in &files_to_delete {
             let dest_file = dest_path.join(relative);
             std::fs::remove_file(&dest_file)?;
@@ -389,7 +392,7 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
     } else {
         println!("  {} files copied", style(total_copies).green());
     }
-    if args.delete && total_deletes > 0 {
+    if args.delete && !config.rules.global.promote_options.no_delete && total_deletes > 0 {
         if total_deletes == 1 {
             println!("  1 file deleted");
         } else {

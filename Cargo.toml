@@ -16,7 +16,7 @@ categories = ["command-line-utilities"]
 keywords = ["gitops", "promotion", "kubernetes", "cli"]
 
 [[bin]]
-name = "promrail"
+name = "prl"
 path = "src/main.rs"
 
 [dependencies]
