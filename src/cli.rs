@@ -44,11 +44,19 @@ pub struct Cli {
 pub enum Commands {
     #[command(about = "Show what would change without applying")]
     Diff {
-        #[arg(short = 's', long)]
-        source: String,
+        #[arg(
+            short = 's',
+            long,
+            help = "Source environment (uses default_source if not set)"
+        )]
+        source: Option<String>,
 
-        #[arg(short = 'd', long)]
-        dest: String,
+        #[arg(
+            short = 'd',
+            long,
+            help = "Destination environment (uses default_dest if not set)"
+        )]
+        dest: Option<String>,
 
         #[arg(name = "filter")]
         filter_vec: Vec<String>,
@@ -68,12 +76,16 @@ pub enum Commands {
         #[arg(
             short = 's',
             long = "source",
-            help = "Source paths (can be specified multiple times for multi-source promotion)"
+            help = "Source environment (uses default_source if not set)"
         )]
         source_vec: Vec<String>,
 
-        #[arg(short = 'd', long)]
-        dest: String,
+        #[arg(
+            short = 'd',
+            long,
+            help = "Destination environment (uses default_dest if not set)"
+        )]
+        dest: Option<String>,
 
         #[arg(name = "filter")]
         filter_vec: Vec<String>,

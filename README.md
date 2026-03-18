@@ -202,8 +202,8 @@ promrail config example -o promrail.yaml
 
 | Option | Description |
 |--------|-------------|
-| `-s, --source <ENV>` | Source environment name |
-| `-d, --dest <ENV>` | Destination environment name |
+| `-s, --source <ENV>` | Source environment (uses default_source if not set) |
+| `-d, --dest <ENV>` | Destination environment (uses default_dest if not set) |
 | `--no-delete` | Do not delete extra files in destination (delete is default) |
 | `--dest-based` | Only operate on directories that exist in both environments |
 | `--include-protected` | Include protected directories (custom, env, local) |
@@ -215,9 +215,44 @@ promrail config example -o promrail.yaml
 
 Run `promrail config show` for embedded documentation, or `promrail config example` for a sample config file.
 
-### Repositories
+### Simple Single-Repo Config
 
-Define multiple GitOps repositories with their environments:
+Place `promrail.yaml` in your repo root:
+
+```yaml
+version: 1
+
+environments:
+  staging: { path: clusters/staging }
+  production: { path: clusters/production }
+
+# Optional: enables `promrail promote` without args
+default_source: staging
+default_dest: production
+
+protected_dirs:
+  - custom
+  - env
+
+allowlist:
+  - "platform/**/*.yaml"
+
+denylist:
+  - "**/*secret*"
+```
+
+Usage:
+
+```bash
+# All equivalent when defaults are set:
+promrail promote
+promrail promote --no-delete
+promrail promote --source staging --dest production
+```
+
+### Multi-Repo Config
+
+For cross-repo promotion, define multiple repos:
 
 ```yaml
 repos:
@@ -232,6 +267,8 @@ repos:
     environments:
       dev: { path: overlays/dev }
       prod: { path: overlays/prod }
+
+default_repo: homelab
 ```
 
 ### File Selection

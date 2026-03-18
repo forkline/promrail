@@ -1,8 +1,8 @@
 //! Configuration handling for promrail.
 //!
-//! Supports two config versions:
-//! - v1: Single repo with multiple environments
-//! - v2: Multiple standalone repos for cross-repo promotion
+//! Supports two config styles:
+//! - Single-repo: Top-level `environments` with optional `default_source`/`default_dest`
+//! - Multi-repo: `repos` section with per-repo environments (for cross-repo promotion)
 //!
 //! Multi-source promotion rules for complex workflows.
 
@@ -20,7 +20,25 @@ pub struct Config {
     #[config_doc(default = "1", required)]
     pub version: u32,
 
+    /// Top-level environments for single-repo mode.
+    /// Use this when promrail.yaml is in the repo root.
+    /// Mutually exclusive with defining environments under repos.
+    #[config_doc(example = "staging: { path: clusters/staging }")]
+    #[serde(default)]
+    pub environments: HashMap<String, EnvironmentConfig>,
+
+    /// Default source environment for promote/diff commands.
+    /// Enables running `promrail promote` without --source flag.
+    #[serde(default)]
+    pub default_source: Option<String>,
+
+    /// Default destination environment for promote/diff commands.
+    /// Enables running `promrail promote` without --dest flag.
+    #[serde(default)]
+    pub default_dest: Option<String>,
+
     /// Repository definitions. Each repo has a path and optional environments.
+    /// Required for multi-repo setups. Optional for single-repo (use top-level environments).
     #[config_doc(example = "gitops: { path: ~/gitops }")]
     #[serde(default)]
     pub repos: HashMap<String, RepoConfig>,
@@ -487,9 +505,32 @@ impl Config {
 
     /// Validate configuration consistency.
     pub fn validate(&self) -> crate::error::AppResult<()> {
+        // Single-repo mode: top-level environments defined
+        if !self.environments.is_empty() {
+            // Validate default_source/default_dest if set
+            if let Some(ref source) = self.default_source
+                && !self.environments.contains_key(source)
+            {
+                return Err(crate::error::PromrailError::ConfigInvalid(format!(
+                    "default_source '{}' not found in environments",
+                    source
+                )));
+            }
+            if let Some(ref dest) = self.default_dest
+                && !self.environments.contains_key(dest)
+            {
+                return Err(crate::error::PromrailError::ConfigInvalid(format!(
+                    "default_dest '{}' not found in environments",
+                    dest
+                )));
+            }
+            return Ok(());
+        }
+
+        // Multi-repo mode: repos defined
         if self.repos.is_empty() {
             return Err(crate::error::PromrailError::ConfigInvalid(
-                "no repos defined".to_string(),
+                "no environments or repos defined".to_string(),
             ));
         }
 
@@ -503,8 +544,42 @@ impl Config {
         Ok(())
     }
 
+    /// Get environments (either top-level or from default repo).
+    pub fn get_environments(&self) -> &HashMap<String, EnvironmentConfig> {
+        if !self.environments.is_empty() {
+            return &self.environments;
+        }
+
+        // Get from default repo
+        if let Ok((_, repo)) = self.get_repo(None) {
+            return &repo.environments;
+        }
+
+        static EMPTY: std::sync::OnceLock<HashMap<String, EnvironmentConfig>> =
+            std::sync::OnceLock::new();
+        EMPTY.get_or_init(HashMap::new)
+    }
+
+    /// Check if using single-repo mode (top-level environments).
+    pub fn is_single_repo(&self) -> bool {
+        !self.environments.is_empty()
+    }
+
     /// Get a repository by name, or the default if none specified.
+    /// Returns an implicit repo for single-repo mode.
     pub fn get_repo(&self, name: Option<&str>) -> crate::error::AppResult<(&String, &RepoConfig)> {
+        // Single-repo mode: return implicit repo
+        if self.is_single_repo() {
+            static IMPLICIT_REPO: std::sync::OnceLock<RepoConfig> = std::sync::OnceLock::new();
+            static IMPLICIT_NAME: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+            let repo = IMPLICIT_REPO.get_or_init(|| RepoConfig {
+                path: ".".to_string(),
+                environments: HashMap::new(), // Not used in single-repo mode
+            });
+            let name = IMPLICIT_NAME.get_or_init(|| "default".to_string());
+            return Ok((name, repo));
+        }
+
         let repo_name = name.unwrap_or(&self.default_repo);
         self.repos
             .get_key_value(repo_name)
@@ -513,6 +588,9 @@ impl Config {
 
     /// Get first repo name (for single-repo configs).
     pub fn first_repo(&self) -> Option<(&String, &RepoConfig)> {
+        if self.is_single_repo() {
+            return self.get_repo(None).ok();
+        }
         self.repos.iter().next()
     }
 
@@ -543,20 +621,19 @@ impl Config {
 # Config schema version (currently 1)
 version: 1
 
-# Repository definitions
-repos:
-  # Repository name (you can define multiple)
-  gitops:
-    # Local path to repository (~ expansion supported)
-    path: ~/gitops
+# SIMPLIFIED SINGLE-REPO MODE
+# Use this when promrail.yaml is in the repo root.
+# No need for repos/default_repo - just define environments directly.
 
-    # Environment definitions
-    environments:
-      staging: { path: clusters/staging }
-      production: { path: clusters/production }
+# Environment definitions (required)
+environments:
+  staging: { path: clusters/staging }
+  production: { path: clusters/production }
 
-# Default repository name (required if multiple repos defined)
-default_repo: gitops
+# Default source/dest for promote/diff (optional)
+# Enables running `promrail promote` without --source/--dest
+default_source: staging
+default_dest: production
 
 # Directories that are never modified during promotion
 # Recommended: custom (env-specific patches), env (env-specific config)
@@ -572,86 +649,62 @@ allowlist:
 
 # Glob patterns for files excluded from promotion
 # Takes precedence over allowlist
-# Recommended: charts (Helm chart dependencies, managed by helm)
 denylist:
   - "**/*secret*"
   - "**/charts/**"
 
-# Delete behavior configuration
-delete:
-  # Enable deletion of files in destination that don't exist in source
-  enabled: false
-  # Only delete files in directories that exist in source
-  dest_based: false
-
 # Git integration settings
 git:
-  # Require clean git working tree before operations
   require_clean_tree: true
 
 # Audit logging settings
 audit:
-  # Enable promotion logging to file
   enabled: true
-  # Path to audit log file
   log_file: .promotion-log.yaml
 
-# Multi-source promotion rules (optional)
-# Used for complex workflows with multiple staging sources
-rules:
-  # Source definitions with priorities
-  sources:
-    staging-homelab:
-      priority: 1
-      description: "Homelab staging environment"
-      include:
-        - platform/*
-        - system/monitoring/*
-      exclude:
-        - platform/homeassistant/*
-
-    staging-work:
-      priority: 2
-      description: "Work staging environment"
-      include:
-        - apps/*
-        - system/auth/*
-
-  # Conflict resolution strategies
-  conflict_resolution:
-    version_strategy: highest
-    config_strategy: source_priority
-    source_order:
-      - staging-work
-      - staging-homelab
-
-  # Component-level rules
-  components:
-    platform/postgres-operator:
-      action: always
-    platform/homeassistant:
-      action: never
-      notes: "Home-specific, not for work production"
-    system/auth/keycloak:
-      action: review
-      notes: "Check for env-specific realm configs"
-
-  # Global rules
-  global:
-    exclude:
-      - "*/custom/*"
-      - "*/env/*"
-    review_required:
-      - "*/secrets/*"
-    version_rules:
-      allow_downgrade: false
-      allow_prerelease: false
-    # Multi-source promotion options
-    promote_options:
-      # Allow duplicate files across sources (default: false = error)
-      allow_duplicates: false
-      # Only promote components that already exist in destination
-      only_existing: false
+# ─────────────────────────────────────────────────────────────────────────────
+# MULTI-REPO MODE (optional, for cross-repo promotion)
+# Uncomment if you need to promote across multiple repositories
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# repos:
+#   gitops:
+#     path: ~/gitops
+#     environments:
+#       staging: { path: clusters/staging }
+#       production: { path: clusters/production }
+#
+#   homelab:
+#     path: ~/homelab
+#
+# default_repo: gitops
+#
+# # Multi-source promotion rules (for complex workflows)
+# rules:
+#   sources:
+#     staging-homelab:
+#       priority: 1
+#       include: [platform/*, system/monitoring/*]
+#
+#     staging-work:
+#       priority: 2
+#       include: [apps/*, system/auth/*]
+#
+#   conflict_resolution:
+#     version_strategy: highest
+#     source_order:
+#       - staging-work
+#       - staging-homelab
+#
+#   components:
+#     platform/homeassistant:
+#       action: never
+#       notes: "Home-specific, not for work production"
+#
+#   global:
+#     exclude:
+#       - "*/custom/*"
+#       - "*/env/*"
 "#
         .to_string()
     }

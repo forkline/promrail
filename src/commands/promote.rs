@@ -37,23 +37,31 @@ pub fn execute(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> AppResult
 
 fn execute_single_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> AppResult<()> {
     let source = &args.sources[0];
-    let (_, repo_config) = config.get_repo(None)?;
+    let environments = config.get_environments();
 
     let source_env =
-        repo_config
-            .environments
+        environments
             .get(source)
             .ok_or_else(|| PromrailError::EnvironmentNotFound {
-                repo: config.default_repo.clone(),
+                repo: if config.is_single_repo() {
+                    "default".to_string()
+                } else {
+                    config.default_repo.clone()
+                },
                 env: source.clone(),
             })?;
 
-    let dest_env = repo_config.environments.get(&args.dest).ok_or_else(|| {
-        PromrailError::EnvironmentNotFound {
-            repo: config.default_repo.clone(),
-            env: args.dest.clone(),
-        }
-    })?;
+    let dest_env =
+        environments
+            .get(&args.dest)
+            .ok_or_else(|| PromrailError::EnvironmentNotFound {
+                repo: if config.is_single_repo() {
+                    "default".to_string()
+                } else {
+                    config.default_repo.clone()
+                },
+                env: args.dest.clone(),
+            })?;
 
     let source_path = PathBuf::from(&source_env.path);
     let dest_path = PathBuf::from(&dest_env.path);
@@ -146,14 +154,19 @@ fn execute_single_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) ->
 }
 
 fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> AppResult<()> {
-    let (_, repo_config) = config.get_repo(None)?;
+    let environments = config.get_environments();
 
-    let dest_env = repo_config.environments.get(&args.dest).ok_or_else(|| {
-        PromrailError::EnvironmentNotFound {
-            repo: config.default_repo.clone(),
-            env: args.dest.clone(),
-        }
-    })?;
+    let dest_env =
+        environments
+            .get(&args.dest)
+            .ok_or_else(|| PromrailError::EnvironmentNotFound {
+                repo: if config.is_single_repo() {
+                    "default".to_string()
+                } else {
+                    config.default_repo.clone()
+                },
+                env: args.dest.clone(),
+            })?;
 
     // Destination is within the current repo
     let dest_path = repo.path.join(&dest_env.path);
@@ -168,7 +181,7 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
     let mut source_paths: Vec<(String, PathBuf)> = Vec::new();
     for source in &args.sources {
         // First, try to resolve as an environment in the current repo
-        if let Some(source_env) = repo_config.environments.get(source) {
+        if let Some(source_env) = environments.get(source) {
             let source_path = repo.path.join(&source_env.path);
             source_paths.push((source.clone(), source_path));
         }
@@ -178,7 +191,11 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
             source_paths.push((repo_name.clone(), repo_path));
         } else {
             return Err(PromrailError::EnvironmentNotFound {
-                repo: config.default_repo.clone(),
+                repo: if config.is_single_repo() {
+                    "default".to_string()
+                } else {
+                    config.default_repo.clone()
+                },
                 env: source.clone(),
             });
         }
