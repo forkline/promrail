@@ -434,7 +434,7 @@ fn handle_repo_command(args: cli::Cli) -> AppResult<()> {
                 dest_based,
                 include_protected,
             };
-            commands::diff::execute(&config, &repo, &diff_args, true)?;
+            commands::diff::execute(&config, &repo, &diff_args, true, false)?;
         }
         Commands::Promote {
             source_vec,
