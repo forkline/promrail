@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use console::style;
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::config::Config;
 use crate::error::{AppResult, PromrailError};
@@ -54,11 +54,12 @@ pub fn execute(
     let source_path = PathBuf::from(&source_env.path);
     let dest_path = PathBuf::from(&dest_env.path);
 
-    info!(
+    println!(
         "Comparing {} -> {}",
         style(&args.source).cyan(),
         style(&args.dest).yellow()
     );
+    println!();
 
     let selector = FileSelector::from_config(config)?;
     let discovery = FileDiscovery::new(selector);
@@ -108,7 +109,7 @@ pub fn execute(
 
         match (source_content, dest_content) {
             (Some(src), None) => {
-                info!("{}", style(format!("+ {}", file.display())).green());
+                println!("{}", style(format!("+ {}", file.display())).green());
                 let diff = FileDiff::added(file.clone(), src);
                 if show_diff {
                     display_file_diff(&diff);
@@ -117,7 +118,7 @@ pub fn execute(
             }
             (Some(src), Some(dst)) => {
                 if src != dst {
-                    info!("{}", style(format!("~ {}", file.display())).yellow());
+                    println!("{}", style(format!("~ {}", file.display())).yellow());
                     let diff = FileDiff::modified(file.clone(), dst, src);
                     if show_diff {
                         display_file_diff(&diff);
@@ -149,7 +150,7 @@ pub fn execute(
                     continue;
                 }
 
-                info!("{}", style(format!("- {}", file.display())).red());
+                println!("{}", style(format!("- {}", file.display())).red());
                 deleted.push(file.clone());
             }
         }
