@@ -14,6 +14,7 @@ mod logger;
 mod versions;
 
 use cli::{Cli, Commands, ConfigCommands, LogLevel, SnapshotCommands, VersionsCommands};
+use commands::default_filter;
 use config::Config;
 use error::AppResult;
 use git::GitRepo;
@@ -438,11 +439,7 @@ fn handle_repo_command(args: cli::Cli) -> AppResult<()> {
             let diff_args = commands::DiffArgs {
                 source,
                 dest,
-                filter: if args.filter_vec.is_empty() {
-                    vec![".*".to_string()]
-                } else {
-                    args.filter_vec.clone()
-                },
+                filter: default_filter(args.filter_vec.clone()),
                 delete: !args.no_delete,
                 dest_based: args.dest_based,
                 include_protected: args.include_protected,
@@ -450,8 +447,7 @@ fn handle_repo_command(args: cli::Cli) -> AppResult<()> {
             commands::diff::execute(&config, &repo, &diff_args, true, false)?;
         }
         Some(Commands::Promote {}) | None => {
-            let promote_args = build_promote_args(
-                &config,
+            let promote_args = commands::PromoteArgs::from_cli(
                 args.source_vec.clone(),
                 args.dest.clone(),
                 args.filter_vec.clone(),
@@ -464,6 +460,7 @@ fn handle_repo_command(args: cli::Cli) -> AppResult<()> {
                 args.force,
                 args.allow_duplicates,
                 args.only_existing,
+                &config,
             )?;
 
             if config.git.require_clean_tree && !promote_args.force && !repo.is_clean()? {
@@ -483,61 +480,4 @@ fn handle_repo_command(args: cli::Cli) -> AppResult<()> {
     }
 
     Ok(())
-}
-
-#[allow(clippy::too_many_arguments)]
-fn build_promote_args(
-    config: &Config,
-    source_vec: Vec<String>,
-    dest: Option<String>,
-    filter_vec: Vec<String>,
-    no_delete: bool,
-    dest_based: bool,
-    dry_run: bool,
-    confirm: bool,
-    show_diff: bool,
-    include_protected: bool,
-    force: bool,
-    allow_duplicates: bool,
-    only_existing: bool,
-) -> AppResult<commands::PromoteArgs> {
-    let sources = if source_vec.is_empty() {
-        config
-            .default_source
-            .clone()
-            .map(|s| vec![s])
-            .ok_or_else(|| {
-                error::PromrailError::ConfigInvalid(
-                    "no source specified and no default_source in config".to_string(),
-                )
-            })?
-    } else {
-        source_vec
-    };
-    let dest = dest
-        .or_else(|| config.default_dest.clone())
-        .ok_or_else(|| {
-            error::PromrailError::ConfigInvalid(
-                "no dest specified and no default_dest in config".to_string(),
-            )
-        })?;
-
-    Ok(commands::PromoteArgs {
-        sources,
-        dest,
-        filter: if filter_vec.is_empty() {
-            vec![".*".to_string()]
-        } else {
-            filter_vec
-        },
-        delete: !no_delete,
-        dest_based,
-        dry_run,
-        confirm,
-        show_diff,
-        include_protected,
-        allow_duplicates,
-        only_existing,
-        force,
-    })
 }

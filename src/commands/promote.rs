@@ -6,6 +6,7 @@ use console::style;
 use log::{info, warn};
 
 use crate::commands::diff::{self, DiffArgs};
+use crate::commands::{default_filter, print_promotion_summary};
 use crate::config::{Config, PromotionAction};
 use crate::error::{AppResult, PromrailError};
 use crate::files::{FileDiscovery, FileSelector};
@@ -26,6 +27,85 @@ pub struct PromoteArgs {
     pub force: bool,
 }
 
+impl PromoteArgs {
+    /// Build PromoteArgs from CLI arguments and config defaults.
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_cli(
+        source_vec: Vec<String>,
+        dest: Option<String>,
+        filter_vec: Vec<String>,
+        no_delete: bool,
+        dest_based: bool,
+        dry_run: bool,
+        confirm: bool,
+        show_diff: bool,
+        include_protected: bool,
+        force: bool,
+        allow_duplicates: bool,
+        only_existing: bool,
+        config: &Config,
+    ) -> AppResult<Self> {
+        let sources = if source_vec.is_empty() {
+            config
+                .default_source
+                .clone()
+                .map(|s| vec![s])
+                .ok_or_else(|| {
+                    PromrailError::ConfigInvalid(
+                        "no source specified and no default_source in config".to_string(),
+                    )
+                })?
+        } else {
+            source_vec
+        };
+        let dest = dest
+            .or_else(|| config.default_dest.clone())
+            .ok_or_else(|| {
+                PromrailError::ConfigInvalid(
+                    "no dest specified and no default_dest in config".to_string(),
+                )
+            })?;
+
+        Ok(Self {
+            sources,
+            dest,
+            filter: default_filter(filter_vec),
+            delete: !no_delete,
+            dest_based,
+            dry_run,
+            confirm,
+            show_diff,
+            include_protected,
+            allow_duplicates,
+            only_existing,
+            force,
+        })
+    }
+}
+
+/// Create environment not found error with correct repo name.
+fn env_not_found_error(config: &Config, env: &str) -> PromrailError {
+    PromrailError::EnvironmentNotFound {
+        repo: if config.is_single_repo() {
+            "default".to_string()
+        } else {
+            config.default_repo.clone()
+        },
+        env: env.to_string(),
+    }
+}
+
+/// Prompt user for confirmation.
+fn confirm_prompt(prompt: &str) -> AppResult<bool> {
+    print!("{} [y/N] ", prompt);
+    io::stdout().flush()?;
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+
+    Ok(input.trim().to_lowercase().starts_with('y'))
+}
+
 pub fn execute(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> AppResult<()> {
     let is_multi_source = args.sources.len() > 1;
 
@@ -42,29 +122,13 @@ fn execute_single_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) ->
 
     let should_delete = args.delete && !config.rules.global.promote_options.no_delete;
 
-    let source_env =
-        environments
-            .get(source)
-            .ok_or_else(|| PromrailError::EnvironmentNotFound {
-                repo: if config.is_single_repo() {
-                    "default".to_string()
-                } else {
-                    config.default_repo.clone()
-                },
-                env: source.clone(),
-            })?;
+    let source_env = environments
+        .get(source)
+        .ok_or_else(|| env_not_found_error(config, source))?;
 
-    let dest_env =
-        environments
-            .get(&args.dest)
-            .ok_or_else(|| PromrailError::EnvironmentNotFound {
-                repo: if config.is_single_repo() {
-                    "default".to_string()
-                } else {
-                    config.default_repo.clone()
-                },
-                env: args.dest.clone(),
-            })?;
+    let dest_env = environments
+        .get(&args.dest)
+        .ok_or_else(|| env_not_found_error(config, &args.dest))?;
 
     let source_path = PathBuf::from(&source_env.path);
     let dest_path = PathBuf::from(&dest_env.path);
@@ -90,17 +154,9 @@ fn execute_single_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) ->
         return Ok(());
     }
 
-    if args.confirm {
-        print!("Proceed with promotion? [y/N] ");
-        io::stdout().flush()?;
-
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-
-        if !input.trim().to_lowercase().starts_with('y') {
-            info!("Promotion cancelled");
-            return Ok(());
-        }
+    if args.confirm && !confirm_prompt("Proceed with promotion?")? {
+        info!("Promotion cancelled");
+        return Ok(());
     }
 
     info!("Applying changes...");
@@ -126,22 +182,7 @@ fn execute_single_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) ->
 
     println!();
     println!("{}", style("Promotion complete!").bold());
-    let copied_count = result.copied.len();
-    let deleted_count = result.deleted.len();
-
-    if copied_count == 1 {
-        println!("  1 file copied");
-    } else {
-        println!("  {} files copied", style(copied_count).green());
-    }
-
-    if should_delete && deleted_count > 0 {
-        if deleted_count == 1 {
-            println!("  1 file deleted");
-        } else {
-            println!("  {} files deleted", style(deleted_count).red());
-        }
-    }
+    print_promotion_summary(result.copied.len(), result.deleted.len(), should_delete);
 
     if config.audit.enabled {
         write_audit_log(
@@ -159,20 +200,12 @@ fn execute_single_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) ->
 fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> AppResult<()> {
     let environments = config.get_environments();
 
-    let dest_env =
-        environments
-            .get(&args.dest)
-            .ok_or_else(|| PromrailError::EnvironmentNotFound {
-                repo: if config.is_single_repo() {
-                    "default".to_string()
-                } else {
-                    config.default_repo.clone()
-                },
-                env: args.dest.clone(),
-            })?;
+    let dest_env = environments
+        .get(&args.dest)
+        .ok_or_else(|| env_not_found_error(config, &args.dest))?;
 
-    // Destination is within the current repo
     let dest_path = repo.path.join(&dest_env.path);
+    let should_delete = args.delete && !config.rules.global.promote_options.no_delete;
 
     info!(
         "Multi-source promotion from {} sources to {}",
@@ -180,27 +213,16 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
         args.dest
     );
 
-    // Resolve source paths - can be either environment names or repo names
     let mut source_paths: Vec<(String, PathBuf)> = Vec::new();
     for source in &args.sources {
-        // First, try to resolve as an environment in the current repo
         if let Some(source_env) = environments.get(source) {
             let source_path = repo.path.join(&source_env.path);
             source_paths.push((source.clone(), source_path));
-        }
-        // Second, try to resolve as a separate repo
-        else if let Some((repo_name, other_repo_config)) = config.repos.get_key_value(source) {
+        } else if let Some((repo_name, other_repo_config)) = config.repos.get_key_value(source) {
             let repo_path = other_repo_config.resolved_path();
             source_paths.push((repo_name.clone(), repo_path));
         } else {
-            return Err(PromrailError::EnvironmentNotFound {
-                repo: if config.is_single_repo() {
-                    "default".to_string()
-                } else {
-                    config.default_repo.clone()
-                },
-                env: source.clone(),
-            });
+            return Err(env_not_found_error(config, source));
         }
     }
 
@@ -329,28 +351,17 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
         return Ok(());
     }
 
-    if args.confirm {
-        print!("Proceed with multi-source promotion? [y/N] ");
-        io::stdout().flush()?;
-
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-
-        if !input.trim().to_lowercase().starts_with('y') {
-            info!("Promotion cancelled");
-            return Ok(());
-        }
+    if args.confirm && !confirm_prompt("Proceed with multi-source promotion?")? {
+        info!("Promotion cancelled");
+        return Ok(());
     }
 
-    // Create snapshot before applying changes
     let snapshot_id = create_multi_source_snapshot(&dest_path)?;
     info!("Created snapshot: {}", snapshot_id);
 
-    // Apply changes
     for (relative, (source_name, source_file)) in &all_files {
         let dest_file = dest_path.join(relative);
 
-        // Skip protected directories
         if is_protected(relative, &config.protected_dirs) && !args.include_protected {
             continue;
         }
@@ -371,7 +382,7 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
         );
     }
 
-    if args.delete && !config.rules.global.promote_options.no_delete {
+    if should_delete {
         for relative in &files_to_delete {
             let dest_file = dest_path.join(relative);
             std::fs::remove_file(&dest_file)?;
@@ -382,23 +393,11 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
         }
     }
 
-    // Save snapshot
     save_multi_source_snapshot(&dest_path, &snapshot_id, &all_files, &files_to_delete)?;
 
     println!();
     println!("{}", style("Multi-source promotion complete!").bold());
-    if total_copies == 1 {
-        println!("  1 file copied");
-    } else {
-        println!("  {} files copied", style(total_copies).green());
-    }
-    if args.delete && !config.rules.global.promote_options.no_delete && total_deletes > 0 {
-        if total_deletes == 1 {
-            println!("  1 file deleted");
-        } else {
-            println!("  {} files deleted", style(total_deletes).red());
-        }
-    }
+    print_promotion_summary(total_copies, total_deletes, should_delete);
 
     if config.audit.enabled {
         let result = diff::PromotionResult {
@@ -426,13 +425,11 @@ fn get_component(path: &Path) -> String {
 }
 
 fn is_protected(path: &Path, protected_dirs: &[String]) -> bool {
-    for component in path.components() {
-        let name = component.as_os_str().to_string_lossy();
-        if protected_dirs.contains(&name.to_string()) {
-            return true;
-        }
-    }
-    false
+    path.components().any(|component| {
+        protected_dirs
+            .iter()
+            .any(|p| component.as_os_str() == std::ffi::OsStr::new(p))
+    })
 }
 
 fn component_exists_in_dest(dest: &Path, component: &str) -> bool {
@@ -559,7 +556,18 @@ fn write_audit_log(
 ) -> AppResult<()> {
     let log_path = repo.path.join(&config.audit.log_file);
 
-    let entry = serde_yaml::to_string(&serde_yaml::Value::Mapping({
+    let mut entries: Vec<serde_yaml::Value> = if log_path.exists() {
+        let content = std::fs::read_to_string(&log_path)?;
+        let doc: serde_yaml::Value = serde_yaml::from_str(&content)?;
+        doc.get("promotions")
+            .and_then(|v| v.as_sequence())
+            .cloned()
+            .unwrap_or_default()
+    } else {
+        vec![]
+    };
+
+    entries.push(serde_yaml::Value::Mapping({
         let mut map = serde_yaml::Mapping::new();
         map.insert(
             serde_yaml::Value::String("timestamp".to_string()),
@@ -591,16 +599,18 @@ fn write_audit_log(
             serde_yaml::Value::Number(result.deleted.len().into()),
         );
         map
-    }))?;
+    }));
 
-    let existing = if log_path.exists() {
-        std::fs::read_to_string(&log_path)?
-    } else {
-        "promotions:\n".to_string()
-    };
+    let doc = serde_yaml::Value::Mapping({
+        let mut map = serde_yaml::Mapping::new();
+        map.insert(
+            serde_yaml::Value::String("promotions".to_string()),
+            serde_yaml::Value::Sequence(entries),
+        );
+        map
+    });
 
-    let new_content = format!("{}  - {}", existing, entry.replace("---\n", "").trim());
-    std::fs::write(&log_path, new_content)?;
+    std::fs::write(&log_path, serde_yaml::to_string(&doc)?)?;
 
     Ok(())
 }
