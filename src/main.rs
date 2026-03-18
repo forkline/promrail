@@ -67,11 +67,18 @@ fn expand_path(path: &str) -> PathBuf {
     PathBuf::from(path)
 }
 
-fn main() -> AppResult<()> {
+fn main() {
     let args = Cli::parse();
 
     setup_logging(args.log_level);
 
+    if let Err(e) = run(args) {
+        eprintln!("Error: {}", e);
+        std::process::exit(1);
+    }
+}
+
+fn run(args: Cli) -> AppResult<()> {
     match args.command {
         Commands::Versions { command } => handle_versions_command(command),
         Commands::Snapshot { command } => handle_snapshot_command(command),

@@ -572,8 +572,10 @@ allowlist:
 
 # Glob patterns for files excluded from promotion
 # Takes precedence over allowlist
+# Recommended: charts (Helm chart dependencies, managed by helm)
 denylist:
   - "**/*secret*"
+  - "charts"
 
 # Delete behavior configuration
 delete:
