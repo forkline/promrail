@@ -87,11 +87,11 @@ Rationale: Clear separation between preview (diff) and action (promote). Validat
 ### 7. Safety Defaults
 
 - `diff` is the default safe operation
-- `promote` requires `--yes` or interactive confirmation
+- `promote` applies changes by default; use `--confirm` for interactive confirmation
 - `--dry-run` available for additional safety
 - Clean git tree required before promotion
 
-Rationale: Prevent accidental changes. Mirror Python tool's safety features.
+Rationale: Streamline promotion workflow while maintaining safety options.
 
 ### 8. Audit Trail
 

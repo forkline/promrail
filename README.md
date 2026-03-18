@@ -95,14 +95,17 @@ promrail diff --source staging --dest production
 promrail diff --source staging --dest production platform/redis-operator
 ```
 
-4. Promote (requires confirmation or `--yes`):
+4. Promote (applies changes by default, use `--confirm` to prompt):
 
 ```bash
 # Dry run first
 promrail promote --source staging --dest production --dry-run
 
 # Actually promote
-promrail promote --source staging --dest production --yes
+promrail promote --source staging --dest production
+
+# With confirmation prompt
+promrail promote --source staging --dest production --confirm
 ```
 
 ## Commands
@@ -206,7 +209,7 @@ promrail config example -o promrail.yaml
 | `--include-protected` | Include protected directories (custom, env, local) |
 | `--dry-run` | Don't modify files (promote only) |
 | `--diff` | Show file content changes (promote only) |
-| `-y, --yes` | Skip confirmation prompt (promote only) |
+| `--confirm` | Ask for confirmation before applying (promote only) |
 
 ## Configuration
 
@@ -263,13 +266,13 @@ By default, promrail deletes files in destination that don't exist in source (ma
 
 ```bash
 # Default: delete extra files in destination
-promrail promote --source staging --dest production --yes
+promrail promote --source staging --dest production
 
 # Keep extra files with --no-delete
-promrail promote --source staging --dest production --no-delete --yes
+promrail promote --source staging --dest production --no-delete
 
 # Dest-based: only delete if parent dir exists in source
-promrail promote --source staging --dest production --dest-based --yes
+promrail promote --source staging --dest production --dest-based
 ```
 
 ### Promotion Rules

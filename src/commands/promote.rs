@@ -17,7 +17,7 @@ pub struct PromoteArgs {
     pub delete: bool,
     pub dest_based: bool,
     pub dry_run: bool,
-    pub yes: bool,
+    pub confirm: bool,
     pub show_diff: bool,
     pub include_protected: bool,
     pub allow_duplicates: bool,
@@ -78,7 +78,7 @@ fn execute_single_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) ->
         return Ok(());
     }
 
-    if !args.yes {
+    if args.confirm {
         print!("Proceed with promotion? [y/N] ");
         io::stdout().flush()?;
 
@@ -292,7 +292,7 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
         return Ok(());
     }
 
-    if !args.yes {
+    if args.confirm {
         print!("Proceed with multi-source promotion? [y/N] ");
         io::stdout().flush()?;
 
