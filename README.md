@@ -51,7 +51,7 @@ yay -S prl-bin
 
 Binaries are made available each release for the Linux and MacOS operating systems.
 
-You can download a prebuilt binary from our [Releases](https://github.com/forkline/promrail/releases).
+You can download a prebuilt binary from our [Releases](https://github.com/forkline/prl/releases).
 
 ```bash
 curl -s https://api.github.com/repos/forkline/promrail/releases/latest \

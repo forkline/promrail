@@ -28,12 +28,12 @@ pub struct Config {
     pub environments: HashMap<String, EnvironmentConfig>,
 
     /// Default source environment for promote/diff commands.
-    /// Enables running `promrail promote` without --source flag.
+    /// Enables running `prl promote` without --source flag.
     #[serde(default)]
     pub default_source: Option<String>,
 
     /// Default destination environment for promote/diff commands.
-    /// Enables running `promrail promote` without --dest flag.
+    /// Enables running `prl promote` without --dest flag.
     #[serde(default)]
     pub default_dest: Option<String>,
 
@@ -637,7 +637,7 @@ environments:
   production: { path: clusters/production }
 
 # Default source/dest for promote/diff (optional)
-# Enables running `promrail promote` without --source/--dest
+# Enables running `prl promote` without --source/--dest
 default_source: staging
 default_dest: production
 

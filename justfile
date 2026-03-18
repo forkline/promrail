@@ -4,13 +4,13 @@
 CARGO_TARGET_DIR := "target"
 CARGO_TARGET := "x86_64-unknown-linux-gnu"
 PROJECT_VERSION := `sed -n 's/^version = "\(.*\)"/\1/p' ./Cargo.toml | head -n1`
-PKG_BASE_NAME := "promrail-" + PROJECT_VERSION + "-" + CARGO_TARGET
+PKG_BASE_NAME := "prl-" + PROJECT_VERSION + "-" + CARGO_TARGET
 
 # Show available commands
 default:
     just --list
 
-# Compile promrail in release mode
+# Compile prl in release mode
 build:
     cargo build --release
 
@@ -69,8 +69,8 @@ update-changelog:
 # Generate release artifacts
 release:
     cargo build --release --all-features --target {{CARGO_TARGET}}
-    tar -czf {{PKG_BASE_NAME}}.tar.gz -C {{CARGO_TARGET_DIR}}/{{CARGO_TARGET}}/release promrail
-    @echo "Released in {{CARGO_TARGET_DIR}}/{{CARGO_TARGET}}/release/promrail"
+    tar -czf {{PKG_BASE_NAME}}.tar.gz -C {{CARGO_TARGET_DIR}}/{{CARGO_TARGET}}/release prl
+    @echo "Released in {{CARGO_TARGET_DIR}}/{{CARGO_TARGET}}/release/prl"
 
 # Clean build artifacts
 clean:
@@ -79,6 +79,6 @@ clean:
 
 # Show project info
 info:
-    @echo "Project: promrail"
+    @echo "Project: prl"
     @echo "Version: {{PROJECT_VERSION}}"
     @echo "Target: {{CARGO_TARGET}}"
