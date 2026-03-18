@@ -77,9 +77,9 @@ Rationale: Compatibility with existing workflow, configurable for different use 
 ### 6. Command Structure
 
 ```
-promrail diff --source <env> --dest <env> [filter...]
-promrail promote --source <env> --dest <env> [options]
-promrail validate
+prl diff --source <env> --dest <env> [filter...]
+prl promote --source <env> --dest <env> [options]
+prl validate
 ```
 
 Rationale: Clear separation between preview (diff) and action (promote). Validate for config checking.

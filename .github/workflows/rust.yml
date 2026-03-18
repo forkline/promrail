@@ -98,7 +98,7 @@ jobs:
 
       - name: Extract crate information
         run: |
-          echo "PROJECT_NAME=promrail" >> $GITHUB_ENV
+          echo "PROJECT_NAME=prl" >> $GITHUB_ENV
           echo "PROJECT_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' ./Cargo.toml | head -n1)" >> $GITHUB_ENV
 
       - name: Make release
@@ -108,7 +108,7 @@ jobs:
           export CARGO_TARGET=${{ matrix.job.target }}
           export PKG_BASE_NAME=${PROJECT_NAME}-${PROJECT_VERSION}-${CARGO_TARGET}
           cargo build --release --target ${CARGO_TARGET}
-          tar -czf ${PKG_BASE_NAME}.tar.gz -C target/${CARGO_TARGET}/release promrail
+          tar -czf ${PKG_BASE_NAME}.tar.gz -C target/${CARGO_TARGET}/release prl
           echo "PKG_BASE_NAME=${PKG_BASE_NAME}" >> $GITHUB_OUTPUT
 
       - name: Generate SHA256 hash

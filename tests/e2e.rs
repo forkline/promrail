@@ -1,4 +1,4 @@
-//! End-to-end tests for promrail
+//! End-to-end tests for prl
 //!
 //! These tests verify the full promotion workflow against a temporary
 //! git repository with staging and production environments.
@@ -138,7 +138,7 @@ audit:
         self.production_path.join(relative_path).exists()
     }
 
-    fn run_promrail(&self, args: &[&str]) -> (bool, String, String) {
+    fn run_prl(&self, args: &[&str]) -> (bool, String, String) {
         let binary = env!("CARGO_BIN_EXE_prl");
 
         let mut cmd = Command::new(binary);
@@ -178,7 +178,7 @@ fn test_repo_not_found_error() {
     let repo = TestRepo::new();
     repo.create_config();
 
-    let (success, _stdout, stderr) = repo.run_promrail(&["--repo", "nonexistent", "validate"]);
+    let (success, _stdout, stderr) = repo.run_prl(&["--repo", "nonexistent", "validate"]);
 
     assert!(!success);
     assert!(stderr.contains("RepoNotFound") || stderr.contains("not found in config"));
@@ -193,7 +193,7 @@ fn test_diff_shows_new_file() {
     repo.commit_all("Add staging config");
 
     let (success, stdout, _stderr) =
-        repo.run_promrail(&["diff", "--source", "staging", "--dest", "production"]);
+        repo.run_prl(&["diff", "--source", "staging", "--dest", "production"]);
 
     assert!(success);
     assert!(
@@ -213,7 +213,7 @@ fn test_diff_shows_modified_file() {
     repo.commit_all("Add configs");
 
     let (success, stdout, _stderr) =
-        repo.run_promrail(&["diff", "--source", "staging", "--dest", "production"]);
+        repo.run_prl(&["diff", "--source", "staging", "--dest", "production"]);
 
     assert!(success);
     assert!(
@@ -234,7 +234,7 @@ fn test_diff_shows_no_changes_when_identical() {
     repo.commit_all("Add identical configs");
 
     let (success, stdout, _stderr) =
-        repo.run_promrail(&["diff", "--source", "staging", "--dest", "production"]);
+        repo.run_prl(&["diff", "--source", "staging", "--dest", "production"]);
 
     assert!(success);
     assert!(
@@ -256,14 +256,8 @@ fn test_promote_copies_new_file() {
     repo.write_staging_file("platform/config.yaml", "key: value\n");
     repo.commit_all("Add staging config");
 
-    let (success, _stdout, _stderr) = repo.run_promrail(&[
-        "promote",
-        "--source",
-        "staging",
-        "--dest",
-        "production",
-        "--yes",
-    ]);
+    let (success, _stdout, _stderr) =
+        repo.run_prl(&["promote", "--source", "staging", "--dest", "production"]);
 
     assert!(success);
     assert!(repo.production_file_exists("platform/config.yaml"));
@@ -282,14 +276,8 @@ fn test_promote_updates_existing_file() {
     repo.write_production_file("platform/config.yaml", "key: old-value\n");
     repo.commit_all("Add configs");
 
-    let (success, _stdout, _stderr) = repo.run_promrail(&[
-        "promote",
-        "--source",
-        "staging",
-        "--dest",
-        "production",
-        "--yes",
-    ]);
+    let (success, _stdout, _stderr) =
+        repo.run_prl(&["promote", "--source", "staging", "--dest", "production"]);
 
     assert!(success);
     assert_eq!(
@@ -306,14 +294,13 @@ fn test_promote_dry_run_does_not_modify() {
     repo.write_staging_file("platform/config.yaml", "key: value\n");
     repo.commit_all("Add staging config");
 
-    let (success, _stdout, _stderr) = repo.run_promrail(&[
+    let (success, _stdout, _stderr) = repo.run_prl(&[
         "promote",
         "--source",
         "staging",
         "--dest",
         "production",
         "--dry-run",
-        "--yes",
     ]);
 
     assert!(success);
@@ -333,7 +320,7 @@ fn test_same_environment_error() {
     repo.create_config();
 
     let (success, _stdout, stderr) =
-        repo.run_promrail(&["diff", "--source", "staging", "--dest", "staging"]);
+        repo.run_prl(&["diff", "--source", "staging", "--dest", "staging"]);
 
     assert!(!success);
     assert!(stderr.contains("same") || stderr.contains("SameEnvironment"));
@@ -345,7 +332,7 @@ fn test_invalid_environment_error() {
     repo.create_config();
 
     let (success, _stdout, stderr) =
-        repo.run_promrail(&["diff", "--source", "nonexistent", "--dest", "production"]);
+        repo.run_prl(&["diff", "--source", "nonexistent", "--dest", "production"]);
 
     assert!(!success);
     assert!(stderr.contains("not found") || stderr.contains("EnvironmentNotFound"));
@@ -365,14 +352,8 @@ fn test_delete_by_default_removes_extra_files() {
     repo.commit_all("Add old config");
 
     // Delete is ON by default (no flag needed)
-    let (success, _stdout, _stderr) = repo.run_promrail(&[
-        "promote",
-        "--source",
-        "staging",
-        "--dest",
-        "production",
-        "--yes",
-    ]);
+    let (success, _stdout, _stderr) =
+        repo.run_prl(&["promote", "--source", "staging", "--dest", "production"]);
 
     assert!(success);
     assert!(
@@ -391,14 +372,13 @@ fn test_no_delete_keeps_extra_files() {
     repo.commit_all("Add old config");
 
     // With --no-delete flag, file should be kept
-    let (success, _stdout, _stderr) = repo.run_promrail(&[
+    let (success, _stdout, _stderr) = repo.run_prl(&[
         "promote",
         "--source",
         "staging",
         "--dest",
         "production",
         "--no-delete",
-        "--yes",
     ]);
 
     assert!(success);
@@ -424,7 +404,7 @@ fn test_dest_based_copy_only_to_existing_dirs() {
     repo.write_production_file("platform/existing.yaml", "existing: true\n");
     repo.commit_all("Add configs");
 
-    let (success, stdout, _stderr) = repo.run_promrail(&[
+    let (success, stdout, _stderr) = repo.run_prl(&[
         "diff",
         "--source",
         "staging",
@@ -460,14 +440,13 @@ fn test_dest_based_delete_only_in_source_dirs() {
     repo.write_production_file("system/old.yaml", "old: config\n");
     repo.commit_all("Add configs");
 
-    let (success, _stdout, _stderr) = repo.run_promrail(&[
+    let (success, _stdout, _stderr) = repo.run_prl(&[
         "promote",
         "--source",
         "staging",
         "--dest",
         "production",
         "--dest-based",
-        "--yes",
     ]);
 
     assert!(success);
@@ -492,7 +471,7 @@ fn test_promote_respects_protected_dirs() {
     repo.commit_all("Add custom configs");
 
     let (success, stdout, _stderr) =
-        repo.run_promrail(&["diff", "--source", "staging", "--dest", "production"]);
+        repo.run_prl(&["diff", "--source", "staging", "--dest", "production"]);
 
     assert!(success);
     assert!(
@@ -510,14 +489,8 @@ fn test_delete_respects_protected_dirs() {
     repo.write_production_file("custom/important.yaml", "important: data\n");
     repo.commit_all("Add important custom config");
 
-    let (success, _stdout, _stderr) = repo.run_promrail(&[
-        "promote",
-        "--source",
-        "staging",
-        "--dest",
-        "production",
-        "--yes",
-    ]);
+    let (success, _stdout, _stderr) =
+        repo.run_prl(&["promote", "--source", "staging", "--dest", "production"]);
 
     assert!(success);
     assert!(
@@ -537,7 +510,7 @@ fn test_include_protected_allows_custom() {
 
     // Without --include-protected: custom/ should be skipped
     let (success, stdout, _stderr) =
-        repo.run_promrail(&["diff", "--source", "staging", "--dest", "production"]);
+        repo.run_prl(&["diff", "--source", "staging", "--dest", "production"]);
     assert!(success);
     assert!(
         stdout.contains("0 files to copy"),
@@ -546,7 +519,7 @@ fn test_include_protected_allows_custom() {
     );
 
     // With --include-protected: custom/ should be promoted
-    let (success, stdout, _stderr) = repo.run_promrail(&[
+    let (success, stdout, _stderr) = repo.run_prl(&[
         "diff",
         "--source",
         "staging",
@@ -562,14 +535,13 @@ fn test_include_protected_allows_custom() {
     );
 
     // Promote with --include-protected
-    let (success, _stdout, _stderr) = repo.run_promrail(&[
+    let (success, _stdout, _stderr) = repo.run_prl(&[
         "promote",
         "--source",
         "staging",
         "--dest",
         "production",
         "--include-protected",
-        "--yes",
     ]);
     assert!(success);
     assert_eq!(
@@ -591,7 +563,7 @@ fn test_promote_with_filter() {
     repo.write_staging_file("system/config.yaml", "key: system\n");
     repo.commit_all("Add configs");
 
-    let (success, stdout, _stderr) = repo.run_promrail(&[
+    let (success, stdout, _stderr) = repo.run_prl(&[
         "diff",
         "--source",
         "staging",
@@ -620,7 +592,7 @@ fn test_regex_filter_support() {
     repo.commit_all("Add configs");
 
     // Filter with regex: only app-a or app-b
-    let (success, stdout, _stderr) = repo.run_promrail(&[
+    let (success, stdout, _stderr) = repo.run_prl(&[
         "diff",
         "--source",
         "staging",
@@ -650,7 +622,7 @@ fn test_promote_respects_denylist() {
     repo.commit_all("Add secrets");
 
     let (success, stdout, _stderr) =
-        repo.run_promrail(&["diff", "--source", "staging", "--dest", "production"]);
+        repo.run_prl(&["diff", "--source", "staging", "--dest", "production"]);
 
     assert!(success);
     assert!(
@@ -675,7 +647,7 @@ fn test_diff_flag_shows_file_content() {
     repo.commit_all("Add configs");
 
     // With --diff flag during promote, should show content changes
-    let (success, stdout, stderr) = repo.run_promrail(&[
+    let (success, stdout, stderr) = repo.run_prl(&[
         "promote",
         "--source",
         "staging",
@@ -683,7 +655,6 @@ fn test_diff_flag_shows_file_content() {
         "production",
         "--diff",
         "--dry-run",
-        "--yes",
     ]);
 
     assert!(success, "Should succeed. stderr: {}", stderr);
@@ -704,10 +675,10 @@ fn test_log_level_option() {
     let repo = TestRepo::new();
     repo.create_config();
 
-    let (success, _stdout, _stderr) = repo.run_promrail(&["--log-level", "debug", "validate"]);
+    let (success, _stdout, _stderr) = repo.run_prl(&["--log-level", "debug", "validate"]);
     assert!(success);
 
-    let (success, _stdout, _stderr) = repo.run_promrail(&["--log-level", "error", "validate"]);
+    let (success, _stdout, _stderr) = repo.run_prl(&["--log-level", "error", "validate"]);
     assert!(success);
 }
 
@@ -724,14 +695,8 @@ fn test_promote_nested_directories() {
     repo.write_staging_file("platform/redis-operator/values.yaml", "replicas: 3\n");
     repo.commit_all("Add nested configs");
 
-    let (success, _stdout, _stderr) = repo.run_promrail(&[
-        "promote",
-        "--source",
-        "staging",
-        "--dest",
-        "production",
-        "--yes",
-    ]);
+    let (success, _stdout, _stderr) =
+        repo.run_prl(&["promote", "--source", "staging", "--dest", "production"]);
 
     assert!(success);
     assert!(repo.production_file_exists("platform/redis-operator/config.yaml"));
@@ -747,14 +712,8 @@ fn test_promote_creates_missing_directories() {
     repo.write_staging_file("platform/redis-operator/config.yaml", "redis: true\n");
     repo.commit_all("Add config");
 
-    let (success, _stdout, _stderr) = repo.run_promrail(&[
-        "promote",
-        "--source",
-        "staging",
-        "--dest",
-        "production",
-        "--yes",
-    ]);
+    let (success, _stdout, _stderr) =
+        repo.run_prl(&["promote", "--source", "staging", "--dest", "production"]);
 
     assert!(success);
     assert!(repo.production_file_exists("platform/redis-operator/config.yaml"));
@@ -774,14 +733,8 @@ fn test_promote_multiple_files() {
     repo.write_staging_file("platform/c.yaml", "c: 3\n");
     repo.commit_all("Add multiple configs");
 
-    let (success, _stdout, _stderr) = repo.run_promrail(&[
-        "promote",
-        "--source",
-        "staging",
-        "--dest",
-        "production",
-        "--yes",
-    ]);
+    let (success, _stdout, _stderr) =
+        repo.run_prl(&["promote", "--source", "staging", "--dest", "production"]);
 
     assert!(success);
     assert!(repo.production_file_exists("platform/a.yaml"));
@@ -802,7 +755,7 @@ fn test_empty_source_directory() {
     repo.commit_all("Add production config");
 
     let (success, stdout, _stderr) =
-        repo.run_promrail(&["diff", "--source", "staging", "--dest", "production"]);
+        repo.run_prl(&["diff", "--source", "staging", "--dest", "production"]);
 
     assert!(success);
     assert!(stdout.contains("0 files to copy"));
@@ -817,14 +770,8 @@ fn test_file_content_with_special_characters() {
     repo.write_staging_file("platform/config.yaml", content);
     repo.commit_all("Add special content");
 
-    let (success, _stdout, _stderr) = repo.run_promrail(&[
-        "promote",
-        "--source",
-        "staging",
-        "--dest",
-        "production",
-        "--yes",
-    ]);
+    let (success, _stdout, _stderr) =
+        repo.run_prl(&["promote", "--source", "staging", "--dest", "production"]);
 
     assert!(success);
     assert_eq!(
@@ -843,14 +790,8 @@ fn test_overwrite_same_content_no_change() {
     repo.write_production_file("platform/config.yaml", content);
     repo.commit_all("Add same content");
 
-    let (success, _stdout, _stderr) = repo.run_promrail(&[
-        "promote",
-        "--source",
-        "staging",
-        "--dest",
-        "production",
-        "--yes",
-    ]);
+    let (success, _stdout, _stderr) =
+        repo.run_prl(&["promote", "--source", "staging", "--dest", "production"]);
 
     assert!(success);
     // File should remain unchanged
@@ -869,7 +810,7 @@ fn test_config_not_found_error() {
     let repo = TestRepo::new();
     // Don't create config
 
-    let (success, _stdout, stderr) = repo.run_promrail(&["validate"]);
+    let (success, _stdout, stderr) = repo.run_prl(&["validate"]);
 
     assert!(!success);
     assert!(stderr.contains("Config") || stderr.contains("not found"));

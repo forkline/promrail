@@ -33,13 +33,13 @@ protected_dirs:
 EOF
 
 # 2. Validate configuration
-promrail validate
+prl validate
 
 # 3. Preview changes
-promrail diff --source staging --dest production
+prl diff --source staging --dest production
 
 # 4. Apply changes
-promrail promote --source staging --dest production
+prl promote --source staging --dest production
 ```
 
 ## Configuration
@@ -78,7 +78,7 @@ default_repo: homelab
 Use `--repo` to select a different repository:
 
 ```bash
-promrail diff --repo work --source dev --dest prod
+prl diff --repo work --source dev --dest prod
 ```
 
 ### Environment Variables
@@ -90,7 +90,7 @@ promrail diff --repo work --source dev --dest prod
 
 ## Commands
 
-### `promrail validate`
+### `prl validate`
 
 Validates the configuration file and checks that:
 - All repositories exist
@@ -99,28 +99,28 @@ Validates the configuration file and checks that:
 - Git repository is clean (if configured)
 
 ```bash
-promrail validate
+prl validate
 
 # With verbose output
-promrail -v validate
+prl -v validate
 ```
 
-### `promrail diff`
+### `prl diff`
 
 Shows what would change without applying:
 
 ```bash
 # Diff all files
-promrail diff --source staging --dest production
+prl diff --source staging --dest production
 
 # Filter by path
-promrail diff --source staging --dest production platform/nginx
+prl diff --source staging --dest production platform/nginx
 
 # Multiple filters
-promrail diff --source staging --dest production platform system
+prl diff --source staging --dest production platform system
 
 # Show what would be deleted
-promrail diff --source staging --dest production --delete
+prl diff --source staging --dest production --delete
 ```
 
 Output symbols:
@@ -128,31 +128,31 @@ Output symbols:
 - `~` (yellow) - File will be modified
 - `-` (red) - File will be deleted (with `--delete`)
 
-### `promrail promote`
+### `prl promote`
 
 Copies files from source to destination. **Delete is enabled by default** (files in destination that don't exist in source will be removed):
 
 ```bash
 # Apply changes (deletes extra files by default)
-promrail promote --source staging --dest production
+prl promote --source staging --dest production
 
 # With confirmation prompt
-promrail promote --source staging --dest production --confirm
+prl promote --source staging --dest production --confirm
 
 # Dry run (no changes)
-promrail promote --source staging --dest production --dry-run
+prl promote --source staging --dest production --dry-run
 
 # Keep extra files (don't delete)
-promrail promote --source staging --dest production --no-delete
+prl promote --source staging --dest production --no-delete
 
 # Dest-based (only copy/delete in directories that exist in both environments)
-promrail promote --source staging --dest production --dest-based
+prl promote --source staging --dest production --dest-based
 
 # Show file content changes during promotion
-promrail promote --source staging --dest production --diff
+prl promote --source staging --dest production --diff
 
 # Include protected directories
-promrail promote --source staging --dest production --include-protected
+prl promote --source staging --dest production --include-protected
 ```
 
 ### `--dest-based` Flag
@@ -170,7 +170,7 @@ Example scenario:
 
 # Without --dest-based: would try to copy apps/ to production
 # With --dest-based: only copies platform/ and system/
-promrail promote --source staging --dest production --dest-based
+prl promote --source staging --dest production --dest-based
 ```
 
 This prevents:
@@ -182,7 +182,7 @@ This prevents:
 Show file content changes during promotion:
 
 ```bash
-promrail promote --source staging --dest production --diff
+prl promote --source staging --dest production --diff
 ```
 
 Output includes unified diff with colored lines:
@@ -195,7 +195,7 @@ Override protected directory exclusion at runtime:
 
 ```bash
 # Normally custom/ is excluded, but with this flag it will be promoted
-promrail promote --source staging --dest production --include-protected
+prl promote --source staging --dest production --include-protected
 ```
 
 ### `--log-level` Option
@@ -204,10 +204,10 @@ Control verbosity of output:
 
 ```bash
 # Show debug messages
-promrail --log-level debug diff --source staging --dest production
+prl --log-level debug diff --source staging --dest production
 
 # Only show errors
-promrail --log-level error promote --source staging --dest production
+prl --log-level error promote --source staging --dest production
 ```
 
 Levels: `error`, `warn`, `info` (default), `debug`, `trace`
@@ -274,10 +274,10 @@ git add clusters/staging/
 git commit -m "feat(nginx): update configuration"
 
 # 3. Preview promotion
-promrail diff --source staging --dest production
+prl diff --source staging --dest production
 
 # 4. Promote to production
-promrail promote --source staging --dest production
+prl promote --source staging --dest production
 
 # 5. Commit promotion
 git add clusters/production/
@@ -291,10 +291,10 @@ Promote only specific components:
 
 ```bash
 # Only platform components
-promrail promote --source staging --dest production platform
+prl promote --source staging --dest production platform
 
 # Specific application
-promrail promote --source staging --dest production apps/keycloak
+prl promote --source staging --dest production apps/keycloak
 ```
 
 ### Multi-Environment Promotion
@@ -312,10 +312,10 @@ repos:
 
 ```bash
 # Dev to staging
-promrail promote --source dev --dest staging
+prl promote --source dev --dest staging
 
 # Staging to production
-promrail promote --source staging --dest production
+prl promote --source staging --dest production
 ```
 
 ## Examples
@@ -409,7 +409,7 @@ Check that your allowlist patterns are correct:
 
 ```bash
 # Debug with verbose mode
-promrail -v diff --source staging --dest production
+prl -v diff --source staging --dest production
 ```
 
 ### "Environment not found"
@@ -444,19 +444,19 @@ denylist:
 
 Promrail can extract, compare, and apply Helm chart versions and container image tags across environments.
 
-### `promrail versions extract`
+### `prl versions extract`
 
 Extract versions from a repository path:
 
 ```bash
 # Extract all versions
-promrail versions extract --path ~/gitops/staging
+prl versions extract --path ~/gitops/staging
 
 # Save to file
-promrail versions extract --path ~/gitops/staging -o versions.json
+prl versions extract --path ~/gitops/staging -o versions.json
 
 # Filter to specific components
-promrail versions extract --path ~/gitops/staging platform/nginx
+prl versions extract --path ~/gitops/staging platform/nginx
 ```
 
 The output is JSON with:
@@ -465,33 +465,33 @@ The output is JSON with:
   - `helm_charts`: List of Helm chart versions from kustomization.yaml and Chart.yaml
   - `container_images`: List of container image tags from values.yaml
 
-### `promrail versions apply`
+### `prl versions apply`
 
 Apply versions from a file to a repository:
 
 ```bash
 # Apply all versions
-promrail versions apply -f versions.json --path ~/gitops/production
+prl versions apply -f versions.json --path ~/gitops/production
 
 # Dry run (preview changes)
-promrail versions apply -f versions.json --path ~/gitops/production --dry-run
+prl versions apply -f versions.json --path ~/gitops/production --dry-run
 
 # Filter to specific components
-promrail versions apply -f versions.json --path ~/gitops/production --component platform/nginx,system/redis
+prl versions apply -f versions.json --path ~/gitops/production --component platform/nginx,system/redis
 
 # Check for version downgrades
-promrail versions apply -f versions.json --path ~/gitops/production --check-conflicts
+prl versions apply -f versions.json --path ~/gitops/production --check-conflicts
 
 # Create a snapshot before applying
-promrail versions apply -f versions.json --path ~/gitops/production --snapshot
+prl versions apply -f versions.json --path ~/gitops/production --snapshot
 ```
 
-### `promrail versions diff`
+### `prl versions diff`
 
 Compare versions between two repositories:
 
 ```bash
-promrail versions diff --source ~/gitops/staging --dest ~/gitops/production
+prl versions diff --source ~/gitops/staging --dest ~/gitops/production
 ```
 
 Output shows version differences:
@@ -525,48 +525,48 @@ snapshots:
           after: "1.3.0"
 ```
 
-### `promrail snapshot list`
+### `prl snapshot list`
 
 List all snapshots:
 
 ```bash
-promrail snapshot list --path ~/gitops/production
+prl snapshot list --path ~/gitops/production
 ```
 
-### `promrail snapshot show`
+### `prl snapshot show`
 
 Show snapshot details:
 
 ```bash
-promrail snapshot show snap_20260317_abc123 --path ~/gitops/production
+prl snapshot show snap_20260317_abc123 --path ~/gitops/production
 ```
 
-### `promrail snapshot rollback`
+### `prl snapshot rollback`
 
 Rollback to a snapshot:
 
 ```bash
-promrail snapshot rollback snap_20260317_abc123 --path ~/gitops/production
+prl snapshot rollback snap_20260317_abc123 --path ~/gitops/production
 ```
 
-### `promrail snapshot delete`
+### `prl snapshot delete`
 
 Delete a snapshot:
 
 ```bash
-promrail snapshot delete snap_20260317_abc123 --path ~/gitops/production
+prl snapshot delete snap_20260317_abc123 --path ~/gitops/production
 ```
 
 ## Config Reference
 
 View configuration documentation directly in the CLI:
 
-### `promrail config show`
+### `prl config show`
 
 Display all configuration options with descriptions, defaults, and examples:
 
 ```bash
-promrail config show
+prl config show
 ```
 
 Output includes:
@@ -576,27 +576,27 @@ Output includes:
 - Example values
 - Environment variables
 
-### `promrail config example`
+### `prl config example`
 
 Generate a sample configuration file:
 
 ```bash
 # Print to stdout
-promrail config example
+prl config example
 
 # Save to file
-promrail config example -o promrail.yaml
+prl config example -o promrail.yaml
 ```
 
-### `promrail config diff`
+### `prl config diff`
 
 Compare configuration files between directories:
 
 ```bash
-promrail config diff ~/gitops/staging ~/gitops/production
+prl config diff ~/gitops/staging ~/gitops/production
 
 # Filter to specific files
-promrail config diff ~/gitops/staging ~/gitops/production -f kustomization.yaml,values.yaml
+prl config diff ~/gitops/staging ~/gitops/production -f kustomization.yaml,values.yaml
 ```
 
 ## Workflows
@@ -605,21 +605,21 @@ promrail config diff ~/gitops/staging ~/gitops/production -f kustomization.yaml,
 
 ```bash
 # 1. Extract versions from staging
-promrail versions extract --path ~/gitops/staging -o staging-versions.json
+prl versions extract --path ~/gitops/staging -o staging-versions.json
 
 # 2. Review the versions
 cat staging-versions.json | jq
 
 # 3. Compare with production
-promrail versions diff --source ~/gitops/staging --dest ~/gitops/production
+prl versions diff --source ~/gitops/staging --dest ~/gitops/production
 
 # 4. Apply with conflict detection and snapshot
-promrail versions apply -f staging-versions.json --path ~/gitops/production \
+prl versions apply -f staging-versions.json --path ~/gitops/production \
   --check-conflicts --snapshot
 
 # 5. If something goes wrong, rollback
-promrail snapshot list --path ~/gitops/production
-promrail snapshot rollback <snapshot-id> --path ~/gitops/production
+prl snapshot list --path ~/gitops/production
+prl snapshot rollback <snapshot-id> --path ~/gitops/production
 ```
 
 ### Cross-Repository Promotion
@@ -628,10 +628,10 @@ For promoting between separate repositories:
 
 ```bash
 # Extract from source repo
-promrail versions extract --path ~/gitops-apps/staging -o versions.json
+prl versions extract --path ~/gitops-apps/staging -o versions.json
 
 # Apply to destination repo
-promrail versions apply -f versions.json --path ~/gitops-infra/production
+prl versions apply -f versions.json --path ~/gitops-infra/production
 ```
 
 ## Multi-Source Promotion
@@ -691,7 +691,7 @@ rules:
 
 ```bash
 # 1. Merge versions from multiple sources
-promrail versions merge \
+prl versions merge \
   --source ~/gitops/staging-homelab \
   --source ~/gitops/staging-work \
   --explain \
@@ -703,7 +703,7 @@ promrail versions merge \
 # - Check items needing review
 
 # 3. Apply merged versions
-promrail versions apply \
+prl versions apply \
   -f merged-versions.json \
   --path ~/gitops/production \
   --check-conflicts \

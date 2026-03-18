@@ -21,7 +21,7 @@ Always read `promrail.yaml` first to understand:
 - **Promotion rules** (if defined)
 
 ```bash
-promrail config show
+prl config show
 ```
 
 ### 2. Check for Rules
@@ -89,14 +89,14 @@ When promoting from multiple sources to one destination:
 ### Step 1: Extract from All Sources
 
 ```bash
-promrail versions extract --path ~/gitops/staging-homelab -o /tmp/homelab-versions.json
-promrail versions extract --path ~/gitops/staging-work -o /tmp/work-versions.json
+prl versions extract --path ~/gitops/staging-homelab -o /tmp/homelab-versions.json
+prl versions extract --path ~/gitops/staging-work -o /tmp/work-versions.json
 ```
 
 ### Step 2: Merge with Rules
 
 ```bash
-promrail versions merge \
+prl versions merge \
   --source ~/gitops/staging-homelab \
   --source ~/gitops/staging-work \
   --explain \
@@ -113,7 +113,7 @@ Check the output for:
 ### Step 4: Apply with Snapshot
 
 ```bash
-promrail versions apply \
+prl versions apply \
   -f /tmp/merged-versions.json \
   --path ~/gitops/production \
   --check-conflicts \
@@ -125,7 +125,7 @@ promrail versions apply \
 The user should:
 1. Run `git diff` to review changes
 2. Commit if acceptable
-3. Rollback if needed: `promrail snapshot rollback <id> --path ~/gitops/production`
+3. Rollback if needed: `prl snapshot rollback <id> --path ~/gitops/production`
 
 ## Decision Process
 
@@ -165,7 +165,7 @@ When generating final recommendations, output:
 ### Recommended Actions
 1. Review keycloak changes for env-specific configs
 2. Verify postgres-operator upgrade is compatible
-3. Run: `promrail versions apply -f merged.json --path production --snapshot`
+3. Run: `prl versions apply -f merged.json --path production --snapshot`
 ```
 
 ## Troubleshooting
@@ -188,8 +188,8 @@ If expected component is not in merged output:
 
 If promotion caused issues:
 ```bash
-promrail snapshot list --path ~/gitops/production
-promrail snapshot rollback <id> --path ~/gitops/production
+prl snapshot list --path ~/gitops/production
+prl snapshot rollback <id> --path ~/gitops/production
 git diff  # Verify rollback
 git checkout -- .  # If needed
 ```
@@ -202,18 +202,18 @@ Opencode should:
 
 1. **Check config**
    ```bash
-   promrail config show
+   prl config show
    ```
 
 2. **Extract versions**
    ```bash
-   promrail versions extract --path ~/gitops/staging-homelab -o /tmp/homelab.json
-   promrail versions extract --path ~/gitops/staging-work -o /tmp/work.json
+   prl versions extract --path ~/gitops/staging-homelab -o /tmp/homelab.json
+   prl versions extract --path ~/gitops/staging-work -o /tmp/work.json
    ```
 
 3. **Merge with explanation**
    ```bash
-   promrail versions merge \
+   prl versions merge \
      -s ~/gitops/staging-homelab \
      -s ~/gitops/staging-work \
      --explain \
@@ -227,7 +227,7 @@ Opencode should:
 
 5. **Apply** after user confirms:
    ```bash
-   promrail versions apply \
+   prl versions apply \
      -f /tmp/merged.json \
      --path ~/gitops/production \
      --snapshot

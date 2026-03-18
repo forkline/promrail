@@ -1,4 +1,4 @@
-//! Error types for promrail.
+//! Error types for prl.
 
 #[derive(Debug, thiserror::Error)]
 pub enum PromrailError {
