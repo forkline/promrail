@@ -87,8 +87,8 @@ pub enum Commands {
         #[arg(long)]
         dry_run: bool,
 
-        #[arg(short, long)]
-        yes: bool,
+        #[arg(long, help = "Ask for confirmation before applying changes")]
+        confirm: bool,
 
         #[arg(long)]
         diff: bool,

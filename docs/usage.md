@@ -39,7 +39,7 @@ promrail validate
 promrail diff --source staging --dest production
 
 # 4. Apply changes
-promrail promote --source staging --dest production --yes
+promrail promote --source staging --dest production
 ```
 
 ## Configuration
@@ -133,26 +133,26 @@ Output symbols:
 Copies files from source to destination. **Delete is enabled by default** (files in destination that don't exist in source will be removed):
 
 ```bash
-# Preview and confirm (deletes extra files by default)
+# Apply changes (deletes extra files by default)
 promrail promote --source staging --dest production
 
-# Skip confirmation
-promrail promote --source staging --dest production --yes
+# With confirmation prompt
+promrail promote --source staging --dest production --confirm
 
 # Dry run (no changes)
-promrail promote --source staging --dest production --dry-run --yes
+promrail promote --source staging --dest production --dry-run
 
 # Keep extra files (don't delete)
-promrail promote --source staging --dest production --no-delete --yes
+promrail promote --source staging --dest production --no-delete
 
 # Dest-based (only copy/delete in directories that exist in both environments)
-promrail promote --source staging --dest production --dest-based --yes
+promrail promote --source staging --dest production --dest-based
 
 # Show file content changes during promotion
-promrail promote --source staging --dest production --diff --yes
+promrail promote --source staging --dest production --diff
 
 # Include protected directories
-promrail promote --source staging --dest production --include-protected --yes
+promrail promote --source staging --dest production --include-protected
 ```
 
 ### `--dest-based` Flag
@@ -170,7 +170,7 @@ Example scenario:
 
 # Without --dest-based: would try to copy apps/ to production
 # With --dest-based: only copies platform/ and system/
-promrail promote --source staging --dest production --dest-based --yes
+promrail promote --source staging --dest production --dest-based
 ```
 
 This prevents:
@@ -182,7 +182,7 @@ This prevents:
 Show file content changes during promotion:
 
 ```bash
-promrail promote --source staging --dest production --diff --yes
+promrail promote --source staging --dest production --diff
 ```
 
 Output includes unified diff with colored lines:
@@ -195,7 +195,7 @@ Override protected directory exclusion at runtime:
 
 ```bash
 # Normally custom/ is excluded, but with this flag it will be promoted
-promrail promote --source staging --dest production --include-protected --yes
+promrail promote --source staging --dest production --include-protected
 ```
 
 ### `--log-level` Option
@@ -207,7 +207,7 @@ Control verbosity of output:
 promrail --log-level debug diff --source staging --dest production
 
 # Only show errors
-promrail --log-level error promote --source staging --dest production --yes
+promrail --log-level error promote --source staging --dest production
 ```
 
 Levels: `error`, `warn`, `info` (default), `debug`, `trace`
@@ -277,7 +277,7 @@ git commit -m "feat(nginx): update configuration"
 promrail diff --source staging --dest production
 
 # 4. Promote to production
-promrail promote --source staging --dest production --yes
+promrail promote --source staging --dest production
 
 # 5. Commit promotion
 git add clusters/production/
@@ -291,10 +291,10 @@ Promote only specific components:
 
 ```bash
 # Only platform components
-promrail promote --source staging --dest production platform --yes
+promrail promote --source staging --dest production platform
 
 # Specific application
-promrail promote --source staging --dest production apps/keycloak --yes
+promrail promote --source staging --dest production apps/keycloak
 ```
 
 ### Multi-Environment Promotion
@@ -312,10 +312,10 @@ repos:
 
 ```bash
 # Dev to staging
-promrail promote --source dev --dest staging --yes
+promrail promote --source dev --dest staging
 
 # Staging to production
-promrail promote --source staging --dest production --yes
+promrail promote --source staging --dest production
 ```
 
 ## Examples
