@@ -571,12 +571,29 @@ fn write_audit_log(
     let log_path = repo.path.join(&config.audit.log_file);
 
     let mut entries: Vec<serde_yaml::Value> = if log_path.exists() {
-        let content = std::fs::read_to_string(&log_path)?;
-        let doc: serde_yaml::Value = serde_yaml::from_str(&content)?;
-        doc.get("promotions")
-            .and_then(|v| v.as_sequence())
-            .cloned()
-            .unwrap_or_default()
+        let content = match std::fs::read_to_string(&log_path) {
+            Ok(c) => c,
+            Err(e) => {
+                warn!("Could not read audit log, starting fresh: {}", e);
+                return write_new_audit_log(&log_path, sources, dest, result);
+            }
+        };
+
+        match serde_yaml::from_str::<serde_yaml::Value>(&content) {
+            Ok(doc) => doc
+                .get("promotions")
+                .and_then(|v| v.as_sequence())
+                .cloned()
+                .unwrap_or_default(),
+            Err(e) => {
+                warn!("Audit log corrupted, backing up and starting fresh: {}", e);
+                let backup_path = log_path.with_extension("yaml.bak");
+                if let Err(backup_err) = std::fs::rename(&log_path, &backup_path) {
+                    warn!("Could not backup corrupted audit log: {}", backup_err);
+                }
+                return write_new_audit_log(&log_path, sources, dest, result);
+            }
+        }
     } else {
         vec![]
     };
@@ -626,5 +643,56 @@ fn write_audit_log(
 
     std::fs::write(&log_path, serde_yaml::to_string(&doc)?)?;
 
+    Ok(())
+}
+
+fn write_new_audit_log(
+    log_path: &std::path::Path,
+    sources: &[String],
+    dest: &str,
+    result: &diff::PromotionResult,
+) -> AppResult<()> {
+    let doc = serde_yaml::Value::Mapping({
+        let mut map = serde_yaml::Mapping::new();
+        map.insert(
+            serde_yaml::Value::String("promotions".to_string()),
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping({
+                let mut entry = serde_yaml::Mapping::new();
+                entry.insert(
+                    serde_yaml::Value::String("timestamp".to_string()),
+                    serde_yaml::Value::String(
+                        time::OffsetDateTime::now_utc()
+                            .format(&time::format_description::well_known::Rfc3339)
+                            .unwrap_or_default(),
+                    ),
+                );
+                entry.insert(
+                    serde_yaml::Value::String("sources".to_string()),
+                    serde_yaml::Value::Sequence(
+                        sources
+                            .iter()
+                            .map(|s| serde_yaml::Value::String(s.clone()))
+                            .collect(),
+                    ),
+                );
+                entry.insert(
+                    serde_yaml::Value::String("destination".to_string()),
+                    serde_yaml::Value::String(dest.to_string()),
+                );
+                entry.insert(
+                    serde_yaml::Value::String("files_copied".to_string()),
+                    serde_yaml::Value::Number(result.copied.len().into()),
+                );
+                entry.insert(
+                    serde_yaml::Value::String("files_deleted".to_string()),
+                    serde_yaml::Value::Number(result.deleted.len().into()),
+                );
+                entry
+            })]),
+        );
+        map
+    });
+
+    std::fs::write(log_path, serde_yaml::to_string(&doc)?)?;
     Ok(())
 }
