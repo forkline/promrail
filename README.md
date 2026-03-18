@@ -1,6 +1,18 @@
-# Promrail
+<h1 align="center">
+  <br>
+  <img src="assets/logo.svg" alt="logo" width="200">
+  <br>
+  Promrail
+  <br>
+  <br>
+</h1>
 
+<p align="center">
 Git-native GitOps promotion tool written in Rust.
+</p>
+
+![Build status](https://img.shields.io/github/actions/workflow/status/forkline/promrail/rust.yml?branch=main)
+![Promrail license](https://img.shields.io/github/license/forkline/promrail)
 
 ## Features
 
