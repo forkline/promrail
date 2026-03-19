@@ -630,39 +630,7 @@ fn write_audit_log(
         vec![]
     };
 
-    entries.push(serde_yaml::Value::Mapping({
-        let mut map = serde_yaml::Mapping::new();
-        map.insert(
-            serde_yaml::Value::String("timestamp".to_string()),
-            serde_yaml::Value::String(
-                time::OffsetDateTime::now_utc()
-                    .format(&time::format_description::well_known::Rfc3339)
-                    .unwrap_or_default(),
-            ),
-        );
-        map.insert(
-            serde_yaml::Value::String("sources".to_string()),
-            serde_yaml::Value::Sequence(
-                sources
-                    .iter()
-                    .map(|s| serde_yaml::Value::String(s.clone()))
-                    .collect(),
-            ),
-        );
-        map.insert(
-            serde_yaml::Value::String("destination".to_string()),
-            serde_yaml::Value::String(dest.to_string()),
-        );
-        map.insert(
-            serde_yaml::Value::String("files_copied".to_string()),
-            serde_yaml::Value::Number(result.copied.len().into()),
-        );
-        map.insert(
-            serde_yaml::Value::String("files_deleted".to_string()),
-            serde_yaml::Value::Number(result.deleted.len().into()),
-        );
-        map
-    }));
+    entries.push(create_audit_entry(sources, dest, result));
 
     let doc = serde_yaml::Value::Mapping({
         let mut map = serde_yaml::Mapping::new();
@@ -688,43 +656,49 @@ fn write_new_audit_log(
         let mut map = serde_yaml::Mapping::new();
         map.insert(
             serde_yaml::Value::String("promotions".to_string()),
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping({
-                let mut entry = serde_yaml::Mapping::new();
-                entry.insert(
-                    serde_yaml::Value::String("timestamp".to_string()),
-                    serde_yaml::Value::String(
-                        time::OffsetDateTime::now_utc()
-                            .format(&time::format_description::well_known::Rfc3339)
-                            .unwrap_or_default(),
-                    ),
-                );
-                entry.insert(
-                    serde_yaml::Value::String("sources".to_string()),
-                    serde_yaml::Value::Sequence(
-                        sources
-                            .iter()
-                            .map(|s| serde_yaml::Value::String(s.clone()))
-                            .collect(),
-                    ),
-                );
-                entry.insert(
-                    serde_yaml::Value::String("destination".to_string()),
-                    serde_yaml::Value::String(dest.to_string()),
-                );
-                entry.insert(
-                    serde_yaml::Value::String("files_copied".to_string()),
-                    serde_yaml::Value::Number(result.copied.len().into()),
-                );
-                entry.insert(
-                    serde_yaml::Value::String("files_deleted".to_string()),
-                    serde_yaml::Value::Number(result.deleted.len().into()),
-                );
-                entry
-            })]),
+            serde_yaml::Value::Sequence(vec![create_audit_entry(sources, dest, result)]),
         );
         map
     });
 
     std::fs::write(log_path, serde_yaml::to_string(&doc)?)?;
     Ok(())
+}
+
+fn create_audit_entry(
+    sources: &[String],
+    dest: &str,
+    result: &diff::PromotionResult,
+) -> serde_yaml::Value {
+    let mut entry = serde_yaml::Mapping::new();
+    entry.insert(
+        serde_yaml::Value::String("timestamp".to_string()),
+        serde_yaml::Value::String(
+            time::OffsetDateTime::now_utc()
+                .format(&time::format_description::well_known::Rfc3339)
+                .unwrap_or_default(),
+        ),
+    );
+    entry.insert(
+        serde_yaml::Value::String("sources".to_string()),
+        serde_yaml::Value::Sequence(
+            sources
+                .iter()
+                .map(|s| serde_yaml::Value::String(s.clone()))
+                .collect(),
+        ),
+    );
+    entry.insert(
+        serde_yaml::Value::String("destination".to_string()),
+        serde_yaml::Value::String(dest.to_string()),
+    );
+    entry.insert(
+        serde_yaml::Value::String("files_copied".to_string()),
+        serde_yaml::Value::Number(result.copied.len().into()),
+    );
+    entry.insert(
+        serde_yaml::Value::String("files_deleted".to_string()),
+        serde_yaml::Value::Number(result.deleted.len().into()),
+    );
+    serde_yaml::Value::Mapping(entry)
 }
