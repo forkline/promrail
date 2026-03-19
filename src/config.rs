@@ -27,10 +27,12 @@ pub struct Config {
     #[serde(default)]
     pub environments: HashMap<String, EnvironmentConfig>,
 
-    /// Default source environment for promote/diff commands.
+    /// Default source environment(s) for promote/diff commands.
     /// Enables running `prl promote` without --source flag.
+    /// For multi-source promotion, list multiple sources.
+    #[config_doc(example = "[staging]", example = "[staging, homelab]")]
     #[serde(default)]
-    pub default_source: Option<String>,
+    pub default_sources: Vec<String>,
 
     /// Default destination environment for promote/diff commands.
     /// Enables running `prl promote` without --dest flag.
@@ -523,14 +525,14 @@ impl Config {
     pub fn validate(&self) -> crate::error::AppResult<()> {
         // Single-repo mode: top-level environments defined
         if !self.environments.is_empty() {
-            // Validate default_source/default_dest if set
-            if let Some(ref source) = self.default_source
-                && !self.environments.contains_key(source)
-            {
-                return Err(crate::error::PromrailError::ConfigInvalid(format!(
-                    "default_source '{}' not found in environments",
-                    source
-                )));
+            // Validate default_sources/default_dest if set
+            for source in &self.default_sources {
+                if !self.environments.contains_key(source) && !self.repos.contains_key(source) {
+                    return Err(crate::error::PromrailError::ConfigInvalid(format!(
+                        "default_sources '{}' not found in environments or repos",
+                        source
+                    )));
+                }
             }
             if let Some(ref dest) = self.default_dest
                 && !self.environments.contains_key(dest)
@@ -648,7 +650,9 @@ environments:
 
 # Default source/dest for promote/diff (optional)
 # Enables running `prl promote` without --source/--dest
-default_source: staging
+# For multi-source, list multiple sources
+default_sources:
+  - staging
 default_dest: production
 
 # Directories that are never modified during promotion

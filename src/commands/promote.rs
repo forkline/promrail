@@ -48,15 +48,12 @@ impl PromoteArgs {
         config: &Config,
     ) -> AppResult<Self> {
         let sources = if source_vec.is_empty() {
-            config
-                .default_source
-                .clone()
-                .map(|s| vec![s])
-                .ok_or_else(|| {
-                    PromrailError::ConfigInvalid(
-                        "no source specified and no default_source in config".to_string(),
-                    )
-                })?
+            if config.default_sources.is_empty() {
+                return Err(PromrailError::ConfigInvalid(
+                    "no source specified and no default_sources in config".to_string(),
+                ));
+            }
+            config.default_sources.clone()
         } else {
             source_vec
         };
