@@ -12,6 +12,12 @@ use crate::error::{AppResult, PromrailError};
 use crate::files::{FileDiscovery, FileSelector};
 use crate::git::{FileDiff, GitRepo};
 
+/// Collected files from sources: relative path -> (source_name, absolute_path)
+type CollectedFiles = HashMap<PathBuf, (String, PathBuf)>;
+
+/// Duplicate files: (relative_path, [source_names])
+type DuplicateFiles = Vec<(PathBuf, Vec<String>)>;
+
 pub struct PromoteArgs {
     pub sources: Vec<String>,
     pub dest: String,
@@ -226,133 +232,22 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
         args.dest
     );
 
-    let mut source_paths: Vec<(String, PathBuf)> = Vec::new();
-    for source in &args.sources {
-        if let Some(source_env) = environments.get(source) {
-            let source_path = repo.path.join(&source_env.path);
-            source_paths.push((source.clone(), source_path));
-        } else if let Some((repo_name, other_repo_config)) = config.repos.get_key_value(source) {
-            let repo_path = other_repo_config.resolved_path();
-            source_paths.push((repo_name.clone(), repo_path));
-        } else {
-            return Err(env_not_found_error(config, source));
-        }
-    }
-
-    // Create file selector
+    let source_paths = resolve_source_paths(config, repo, &args.sources)?;
     let selector = FileSelector::from_config(config)?;
     let discovery = FileDiscovery::new(selector);
 
-    // Collect all files from all sources
-    let mut all_files: HashMap<PathBuf, (String, PathBuf)> = HashMap::new();
-    let mut duplicates: Vec<(PathBuf, Vec<String>)> = Vec::new();
+    let (all_files, duplicates) =
+        collect_files_from_sources(&discovery, &source_paths, &dest_path, config, args)?;
 
-    for (source_name, source_path) in &source_paths {
-        debug!("Discovering files in: {}", source_path.display());
-        let discovered = discovery.discover(
-            source_path,
-            &args.filter,
-            args.include_protected,
-            args.ignore_gitignore,
-        )?;
-        debug!("  Found {} files", discovered.files.len());
+    handle_duplicates(&duplicates, args, &config.rules.global.promote_options)?;
 
-        for file in &discovered.files {
-            // file is already a relative path from discover()
-            let relative = file.clone();
-            let absolute = source_path.join(&relative);
-
-            // Check if this file is in a protected directory
-            if is_protected(&relative, &config.protected_dirs) && !args.include_protected {
-                continue;
-            }
-
-            // Check if source includes this component (from rules)
-            if config.rules.has_rules() {
-                let component = get_component(&relative);
-                if !config.rules.source_includes(source_name, &component) {
-                    continue;
-                }
-
-                // Check component action
-                let action = config.rules.get_action(&component);
-                if action == PromotionAction::Never {
-                    info!("Skipping {} (action: never)", component);
-                    continue;
-                }
-            }
-
-            // Check only_existing
-            if args.only_existing || config.rules.global.promote_options.only_existing {
-                let component = get_component(&relative);
-                if !component_exists_in_dest(&dest_path, &component) {
-                    info!("Skipping new component: {} (only_existing)", component);
-                    continue;
-                }
-            }
-
-            // Check for duplicates
-            if let Some((existing_source, _)) = all_files.get(&relative) {
-                // Duplicate found
-                let existing = existing_source.clone();
-                if let Some(pos) = duplicates.iter().position(|(p, _)| p == &relative) {
-                    duplicates[pos].1.push(source_name.clone());
-                } else {
-                    duplicates.push((relative.clone(), vec![existing, source_name.clone()]));
-                }
-            } else {
-                all_files.insert(relative.clone(), (source_name.clone(), absolute));
-            }
-        }
-    }
-
-    // Handle duplicates
-    if !duplicates.is_empty()
-        && !args.allow_duplicates
-        && !config.rules.global.promote_options.allow_duplicates
-    {
-        return Err(PromrailError::DuplicateFiles(
-            duplicates
-                .iter()
-                .map(|(p, s)| format!("{} (in: {})", p.display(), s.join(", ")))
-                .collect(),
-        ));
-    }
-
-    if !duplicates.is_empty() {
-        for (file, sources) in &duplicates {
-            warn!(
-                "Duplicate file {} found in sources: {} (using first source)",
-                file.display(),
-                sources.join(", ")
-            );
-        }
-    }
-
-    // Discover destination files
-    let dest_discovered = discovery.discover(
+    let files_to_delete = calculate_files_to_delete(
+        &discovery,
         &dest_path,
-        &args.filter,
-        args.include_protected,
-        args.ignore_gitignore,
+        &all_files,
+        &config.protected_dirs,
+        args,
     )?;
-
-    // Calculate files to delete (not in any source)
-    let mut files_to_delete: Vec<PathBuf> = Vec::new();
-    let all_relative: HashSet<PathBuf> = all_files.keys().cloned().collect();
-
-    for file in &dest_discovered.files {
-        // file is already relative from discover()
-        let relative = file.clone();
-
-        if is_protected(&relative, &config.protected_dirs) {
-            continue;
-        }
-
-        if !all_relative.contains(&relative) {
-            files_to_delete.push(relative);
-        }
-    }
 
     // Show summary
     let total_copies = all_files.len();
@@ -701,4 +596,150 @@ fn create_audit_entry(
         serde_yaml::Value::Number(result.deleted.len().into()),
     );
     serde_yaml::Value::Mapping(entry)
+}
+
+/// Resolve source names to their filesystem paths.
+fn resolve_source_paths(
+    config: &Config,
+    repo: &GitRepo,
+    sources: &[String],
+) -> AppResult<Vec<(String, PathBuf)>> {
+    let environments = config.get_environments();
+    let mut source_paths: Vec<(String, PathBuf)> = Vec::new();
+
+    for source in sources {
+        if let Some(source_env) = environments.get(source) {
+            let source_path = repo.path.join(&source_env.path);
+            source_paths.push((source.clone(), source_path));
+        } else if let Some((repo_name, other_repo_config)) = config.repos.get_key_value(source) {
+            let repo_path = other_repo_config.resolved_path();
+            source_paths.push((repo_name.clone(), repo_path));
+        } else {
+            return Err(env_not_found_error(config, source));
+        }
+    }
+
+    Ok(source_paths)
+}
+
+/// Collect files from all sources, handling rules and duplicates.
+fn collect_files_from_sources(
+    discovery: &FileDiscovery,
+    source_paths: &[(String, PathBuf)],
+    dest_path: &Path,
+    config: &Config,
+    args: &PromoteArgs,
+) -> AppResult<(CollectedFiles, DuplicateFiles)> {
+    let mut all_files: CollectedFiles = HashMap::new();
+    let mut duplicates: DuplicateFiles = Vec::new();
+
+    for (source_name, source_path) in source_paths {
+        debug!("Discovering files in: {}", source_path.display());
+        let discovered = discovery.discover(
+            source_path,
+            &args.filter,
+            args.include_protected,
+            args.ignore_gitignore,
+        )?;
+        debug!("  Found {} files", discovered.files.len());
+
+        for file in &discovered.files {
+            let relative = file.clone();
+            let absolute = source_path.join(&relative);
+
+            if is_protected(&relative, &config.protected_dirs) && !args.include_protected {
+                continue;
+            }
+
+            if config.rules.has_rules() {
+                let component = get_component(&relative);
+                if !config.rules.source_includes(source_name, &component) {
+                    continue;
+                }
+
+                let action = config.rules.get_action(&component);
+                if action == PromotionAction::Never {
+                    info!("Skipping {} (action: never)", component);
+                    continue;
+                }
+            }
+
+            if args.only_existing || config.rules.global.promote_options.only_existing {
+                let component = get_component(&relative);
+                if !component_exists_in_dest(dest_path, &component) {
+                    info!("Skipping new component: {} (only_existing)", component);
+                    continue;
+                }
+            }
+
+            if let Some((existing_source, _)) = all_files.get(&relative) {
+                let existing = existing_source.clone();
+                if let Some(pos) = duplicates.iter().position(|(p, _)| p == &relative) {
+                    duplicates[pos].1.push(source_name.clone());
+                } else {
+                    duplicates.push((relative.clone(), vec![existing, source_name.clone()]));
+                }
+            } else {
+                all_files.insert(relative, (source_name.clone(), absolute));
+            }
+        }
+    }
+
+    Ok((all_files, duplicates))
+}
+
+/// Handle duplicate files across sources.
+fn handle_duplicates(
+    duplicates: &DuplicateFiles,
+    args: &PromoteArgs,
+    promote_options: &crate::config::PromoteOptions,
+) -> AppResult<()> {
+    if duplicates.is_empty() {
+        return Ok(());
+    }
+
+    if !args.allow_duplicates && !promote_options.allow_duplicates {
+        return Err(PromrailError::DuplicateFiles(
+            duplicates
+                .iter()
+                .map(|(p, s)| format!("{} (in: {})", p.display(), s.join(", ")))
+                .collect(),
+        ));
+    }
+
+    for (file, sources) in duplicates {
+        warn!(
+            "Duplicate file {} found in sources: {} (using first source)",
+            file.display(),
+            sources.join(", ")
+        );
+    }
+
+    Ok(())
+}
+
+/// Calculate files to delete from destination.
+fn calculate_files_to_delete(
+    discovery: &FileDiscovery,
+    dest_path: &Path,
+    all_files: &CollectedFiles,
+    protected_dirs: &[String],
+    args: &PromoteArgs,
+) -> AppResult<Vec<PathBuf>> {
+    let dest_discovered = discovery.discover(
+        dest_path,
+        &args.filter,
+        args.include_protected,
+        args.ignore_gitignore,
+    )?;
+    let all_relative: HashSet<PathBuf> = all_files.keys().cloned().collect();
+
+    let files_to_delete: Vec<PathBuf> = dest_discovered
+        .files
+        .iter()
+        .filter(|file| !is_protected(file, protected_dirs) && !all_relative.contains(*file))
+        .cloned()
+        .collect();
+
+    Ok(files_to_delete)
 }
