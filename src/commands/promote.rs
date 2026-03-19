@@ -24,6 +24,7 @@ pub struct PromoteArgs {
     pub include_protected: bool,
     pub allow_duplicates: bool,
     pub only_existing: bool,
+    pub ignore_gitignore: bool,
     pub force: bool,
 }
 
@@ -43,6 +44,7 @@ impl PromoteArgs {
         force: bool,
         allow_duplicates: bool,
         only_existing: bool,
+        include_gitignored: bool,
         config: &Config,
     ) -> AppResult<Self> {
         let sources = if source_vec.is_empty() {
@@ -66,6 +68,12 @@ impl PromoteArgs {
                 )
             })?;
 
+        let ignore_gitignore = if include_gitignored {
+            false
+        } else {
+            config.rules.global.promote_options.ignore_gitignore
+        };
+
         Ok(Self {
             sources,
             dest,
@@ -78,6 +86,7 @@ impl PromoteArgs {
             include_protected,
             allow_duplicates,
             only_existing,
+            ignore_gitignore,
             force,
         })
     }
@@ -243,7 +252,12 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
 
     for (source_name, source_path) in &source_paths {
         debug!("Discovering files in: {}", source_path.display());
-        let discovered = discovery.discover(source_path, &args.filter, args.include_protected)?;
+        let discovered = discovery.discover(
+            source_path,
+            &args.filter,
+            args.include_protected,
+            args.ignore_gitignore,
+        )?;
         debug!("  Found {} files", discovered.files.len());
 
         for file in &discovered.files {
@@ -319,7 +333,12 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
     }
 
     // Discover destination files
-    let dest_discovered = discovery.discover(&dest_path, &args.filter, args.include_protected)?;
+    let dest_discovered = discovery.discover(
+        &dest_path,
+        &args.filter,
+        args.include_protected,
+        args.ignore_gitignore,
+    )?;
 
     // Calculate files to delete (not in any source)
     let mut files_to_delete: Vec<PathBuf> = Vec::new();

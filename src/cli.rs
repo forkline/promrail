@@ -103,6 +103,13 @@ pub struct Cli {
         help = "Only update components that already exist in destination"
     )]
     pub only_existing: bool,
+
+    #[arg(
+        long,
+        global = true,
+        help = "Include files matching .gitignore patterns"
+    )]
+    pub include_gitignored: bool,
 }
 
 #[derive(Debug, Clone, Subcommand)]

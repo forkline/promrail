@@ -460,6 +460,7 @@ fn handle_repo_command(args: cli::Cli) -> AppResult<()> {
                 args.force,
                 args.allow_duplicates,
                 args.only_existing,
+                args.include_gitignored,
                 &config,
             )?;
 
