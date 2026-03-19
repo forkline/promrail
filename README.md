@@ -2,7 +2,7 @@
   <br>
   <img src="assets/logo.svg" alt="logo" width="200">
   <br>
-  prl
+  Promrail
   <br>
   <br>
 </h1>
