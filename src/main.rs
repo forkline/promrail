@@ -420,10 +420,10 @@ fn handle_repo_command(args: cli::Cli) -> AppResult<()> {
                 .source_vec
                 .first()
                 .cloned()
-                .or_else(|| config.default_source.clone())
+                .or_else(|| config.default_sources.first().cloned())
                 .ok_or_else(|| {
                     error::PromrailError::ConfigInvalid(
-                        "no source specified and no default_source in config".to_string(),
+                        "no source specified and no default_sources in config".to_string(),
                     )
                 })?;
             let dest = args

@@ -46,7 +46,7 @@ pub struct Cli {
         short = 's',
         long = "source",
         global = true,
-        help = "Source environment (uses default_source if not set)"
+        help = "Source environment (uses default_sources if not set)"
     )]
     pub source_vec: Vec<String>,
 
