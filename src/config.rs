@@ -273,6 +273,16 @@ pub struct PromoteOptions {
     #[config_doc(default = "false")]
     #[serde(default)]
     pub no_delete: bool,
+
+    /// Ignore files matching .gitignore patterns.
+    /// When true (default), files matching .gitignore are excluded from promotion.
+    #[config_doc(default = "true")]
+    #[serde(default = "default_ignore_gitignore")]
+    pub ignore_gitignore: bool,
+}
+
+fn default_ignore_gitignore() -> bool {
+    true
 }
 
 /// Version change rules.

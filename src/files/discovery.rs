@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+use ignore::WalkBuilder;
 use walkdir::WalkDir;
 
 use crate::error::AppResult;
@@ -32,34 +33,84 @@ impl FileDiscovery {
         root: &Path,
         filter: &[String],
         include_protected: bool,
+        ignore_gitignore: bool,
     ) -> AppResult<DiscoveredFiles> {
         let mut files = Vec::new();
         let mut dirs = HashSet::new();
 
-        for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
-            let path = entry.path();
+        if ignore_gitignore {
+            // Use ignore crate for gitignore-aware traversal
+            // The walker automatically skips entries matching gitignore patterns
+            let mut walk = WalkBuilder::new(root)
+                .hidden(false)
+                .git_ignore(true)
+                .git_global(true)
+                .git_exclude(true)
+                .build();
 
-            if path.is_dir() {
-                continue;
+            loop {
+                match walk.next() {
+                    Some(Ok(entry)) => {
+                        let file_type = match entry.file_type() {
+                            Some(ft) => ft,
+                            None => continue,
+                        };
+
+                        // Skip directories
+                        if file_type.is_dir() {
+                            continue;
+                        }
+
+                        let path = entry.path();
+                        let relative = path.strip_prefix(root).unwrap_or(path);
+
+                        if !self.selector.should_promote(relative, include_protected) {
+                            continue;
+                        }
+
+                        if !FileSelector::matches_filter(relative, filter) {
+                            continue;
+                        }
+
+                        if let Some(parent) = relative.parent()
+                            && parent != Path::new("")
+                        {
+                            dirs.insert(parent.to_path_buf());
+                        }
+
+                        files.push(relative.to_path_buf());
+                    }
+                    Some(Err(_)) => continue,
+                    None => break,
+                }
             }
+        } else {
+            // Fallback to walkdir without gitignore filtering
+            for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
+                let path = entry.path();
 
-            let relative = path.strip_prefix(root).unwrap_or(path);
+                if path.is_dir() {
+                    continue;
+                }
 
-            if !self.selector.should_promote(relative, include_protected) {
-                continue;
+                let relative = path.strip_prefix(root).unwrap_or(path);
+
+                if !self.selector.should_promote(relative, include_protected) {
+                    continue;
+                }
+
+                if !FileSelector::matches_filter(relative, filter) {
+                    continue;
+                }
+
+                if let Some(parent) = relative.parent()
+                    && parent != Path::new("")
+                {
+                    dirs.insert(parent.to_path_buf());
+                }
+
+                files.push(relative.to_path_buf());
             }
-
-            if !FileSelector::matches_filter(relative, filter) {
-                continue;
-            }
-
-            if let Some(parent) = relative.parent()
-                && parent != Path::new("")
-            {
-                dirs.insert(parent.to_path_buf());
-            }
-
-            files.push(relative.to_path_buf());
         }
 
         Ok(DiscoveredFiles { files, dirs })

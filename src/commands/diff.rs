@@ -75,15 +75,19 @@ pub fn execute(
     let selector = FileSelector::from_config(config)?;
     let discovery = FileDiscovery::new(selector);
 
+    let ignore_gitignore = config.rules.global.promote_options.ignore_gitignore;
+
     let source_files = discovery.discover(
         &repo.path.join(&source_path),
         &args.filter,
         args.include_protected,
+        ignore_gitignore,
     )?;
     let dest_files = discovery.discover(
         &repo.path.join(&dest_path),
         &args.filter,
         args.include_protected,
+        ignore_gitignore,
     )?;
 
     let source_set: HashSet<_> = source_files.files.iter().cloned().collect();
