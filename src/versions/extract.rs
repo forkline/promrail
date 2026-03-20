@@ -76,16 +76,17 @@ pub fn extract_versions(root: &Path, filters: &[String]) -> AppResult<VersionRep
 
 /// Check if file should be skipped.
 fn should_skip_file(path: &str) -> bool {
-    let skip_patterns = [
-        "/custom/",
-        "/test/",
-        "/tests/",
-        "/templates/",
-        "secrets",
-        "secret",
-    ];
+    let normalized = path.replace('\\', "/");
+    let segments: Vec<&str> = normalized.split('/').collect();
 
-    skip_patterns.iter().any(|p| path.contains(p))
+    if segments
+        .iter()
+        .any(|segment| matches!(*segment, "custom" | "test" | "tests" | "templates"))
+    {
+        return true;
+    }
+
+    false
 }
 
 /// Get component path (parent directory of the file).
@@ -356,5 +357,20 @@ controllers:
 "#;
         let versions = extract_from_values(content, "values.yaml");
         assert_eq!(versions.container_images.len(), 2);
+    }
+
+    #[test]
+    fn test_should_not_skip_external_secrets_component() {
+        assert!(!should_skip_file(
+            "platform/external-secrets/kustomization.yaml"
+        ));
+        assert!(!should_skip_file("platform/external-secrets/values.yaml"));
+    }
+
+    #[test]
+    fn test_should_skip_actual_secret_paths() {
+        assert!(!should_skip_file("apps/foo/secrets/config.yaml"));
+        assert!(should_skip_file("apps/foo/custom/secret.yaml"));
+        assert!(!should_skip_file("apps/foo/secret/config.yaml"));
     }
 }
