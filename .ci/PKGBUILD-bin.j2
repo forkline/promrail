@@ -5,14 +5,14 @@ pkgver={{ env.PROJECT_VERSION }}
 pkgrel=1
 pkgdesc="Git-native GitOps promotion tool"
 arch=('x86_64' 'aarch64')
-url="https://github.com/forkline/promrail"
+url="https://github.com/forkline/prl"
 license=('MIT')
 provides=("${_pkgname}")
 conflicts=("${_pkgname}")
 
-source=("https://github.com/forkline/promrail/releases/download/v${pkgver}/promrail-${pkgver}-${CARCH}-unknown-linux-gnu.tar.gz")
+source=("https://github.com/forkline/prl/releases/download/v${pkgver}/prl-${pkgver}-${CARCH}-unknown-linux-gnu.tar.gz")
 sha256sums=('{{ checksum }}')
 
 package() {
-	install -Dm755 promrail "${pkgdir}/usr/bin/promrail"
+	install -Dm755 prl "${pkgdir}/usr/bin/prl"
 }

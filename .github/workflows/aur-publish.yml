@@ -32,9 +32,9 @@ jobs:
     strategy:
       matrix:
         package:
-          - name: prl
+          - name: promrail
             pkgbuild: PKGBUILD
-          - name: prl-bin
+          - name: promrail-bin
             pkgbuild: PKGBUILD-bin
 
     steps:
