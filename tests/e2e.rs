@@ -20,6 +20,14 @@ struct TestRepo {
     _temp_dir: TempDir,
 }
 
+fn has_ruamel_yaml() -> bool {
+    Command::new("python")
+        .args(["-c", "import ruamel.yaml"])
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
 impl TestRepo {
     fn new() -> Self {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -1254,7 +1262,9 @@ fn test_multi_source_preserve_rule_keeps_destination_env_values() {
         "https://prod.example.com/callback"
     );
     assert_eq!(doc["spec"]["common"], "new");
-    assert!(content.contains("  redirectUrl:\n    - https://prod.example.com/callback\n"));
+    if has_ruamel_yaml() {
+        assert!(content.contains("  redirectUrl:\n    - https://prod.example.com/callback\n"));
+    }
 }
 
 #[test]
