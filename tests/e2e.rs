@@ -136,6 +136,33 @@ audit:
         fs::create_dir_all(self.repo_path.join("staging-b")).expect("Failed to create staging-b");
     }
 
+    fn create_multi_source_config_with_review_rule(&self, component: &str) {
+        self.create_multi_source_config();
+        let mut config = fs::read_to_string(&self.config_path).expect("Failed to read config");
+        config.push_str(&format!(
+            "\nrules:\n  components:\n    {component}:\n      action: review\n      notes: \"Needs review during promotion\"\n"
+        ));
+        fs::write(&self.config_path, config).expect("Failed to update config");
+    }
+
+    fn create_multi_source_config_with_preserve_rule(
+        &self,
+        component: &str,
+        file: &str,
+        paths: &[&str],
+    ) {
+        self.create_multi_source_config();
+        let mut config = fs::read_to_string(&self.config_path).expect("Failed to read config");
+        let joined_paths = paths
+            .iter()
+            .map(|path| format!("            - {}\n", path))
+            .collect::<String>();
+        config.push_str(&format!(
+            "\nrules:\n  components:\n    {component}:\n      action: always\n      notes: \"Preserve destination-specific paths\"\n      preserve:\n        - file: {file}\n          paths:\n{joined_paths}"
+        ));
+        fs::write(&self.config_path, config).expect("Failed to update config");
+    }
+
     fn create_realistic_gitops_config(&self) {
         let homelab_path = self.repo_path.join("homelab");
         fs::create_dir_all(&homelab_path).expect("Failed to create homelab dir");
@@ -868,7 +895,7 @@ fn test_diff_flag_shows_file_content() {
     repo.commit_all("Add configs");
 
     // With --diff flag during promote, should show content changes
-    let (success, stdout, stderr) = repo.run_prl(&[
+    let (success, stdout, _stderr) = repo.run_prl(&[
         "promote",
         "--source",
         "staging",
@@ -878,7 +905,7 @@ fn test_diff_flag_shows_file_content() {
         "--dry-run",
     ]);
 
-    assert!(success, "Should succeed. stderr: {}", stderr);
+    assert!(success, "Should succeed. stdout: {}", stdout);
     // Should show diff output (lines with + or -)
     assert!(
         stdout.contains("+") || stdout.contains("-") || stdout.contains("key:"),
@@ -1088,6 +1115,145 @@ fn test_multi_source_stale_artifact_requires_fresh_review() {
     let artifact_path = repo.review_artifact_path().expect("Missing artifact");
     let artifact = fs::read_to_string(artifact_path).expect("Failed to read artifact");
     assert!(artifact.contains("status: pending"), "{}", artifact);
+}
+
+#[test]
+fn test_multi_source_review_rule_creates_artifact_for_non_version_file() {
+    let repo = TestRepo::new();
+    repo.create_multi_source_config_with_review_rule("platform/demo");
+
+    repo.write_env_file("production", "platform/demo/config.yaml", "mode: prod\n");
+    repo.write_env_file("staging-a", "platform/demo/config.yaml", "mode: source\n");
+    repo.commit_all("Add review-ruled component");
+
+    let (success, stdout, _stderr) = repo.run_prl(&[
+        "promote",
+        "--source",
+        "staging-a",
+        "--source",
+        "staging-b",
+        "--dest",
+        "production",
+    ]);
+
+    assert!(success, "{}", stdout);
+    assert!(
+        stdout.contains("Review required before promotion."),
+        "{}",
+        stdout
+    );
+    assert!(repo.review_artifact_path().is_some());
+    assert_eq!(
+        repo.read_env_file("production", "platform/demo/config.yaml"),
+        Some("mode: prod\n".to_string())
+    );
+}
+
+#[test]
+fn test_multi_source_review_rule_can_be_promoted_without_selected_source_for_single_candidate() {
+    let repo = TestRepo::new();
+    repo.create_multi_source_config_with_review_rule("platform/demo");
+
+    repo.write_env_file("production", "platform/demo/config.yaml", "mode: prod\n");
+    repo.write_env_file("staging-a", "platform/demo/config.yaml", "mode: source\n");
+    repo.commit_all("Add review-ruled component");
+
+    let (_success, _stdout, _stderr) = repo.run_prl(&[
+        "promote",
+        "--source",
+        "staging-a",
+        "--source",
+        "staging-b",
+        "--dest",
+        "production",
+    ]);
+
+    let path = repo
+        .review_artifact_path()
+        .expect("Missing review artifact");
+    let content = fs::read_to_string(&path).expect("Failed to read artifact");
+    let mut doc: serde_yaml::Value =
+        serde_yaml::from_str(&content).expect("Failed to parse artifact");
+    doc["status"] = serde_yaml::Value::String("classified".to_string());
+    if let Some(items) = doc
+        .get_mut("items")
+        .and_then(|value| value.as_sequence_mut())
+    {
+        for item in items {
+            item["decision"] = serde_yaml::Value::String("promote".to_string());
+            item["selected_source"] = serde_yaml::Value::Null;
+        }
+    }
+    fs::write(
+        &path,
+        serde_yaml::to_string(&doc).expect("Failed to serialize artifact"),
+    )
+    .expect("Failed to write artifact");
+
+    let (success, stdout, _stderr) = repo.run_prl(&[
+        "promote",
+        "--source",
+        "staging-a",
+        "--source",
+        "staging-b",
+        "--dest",
+        "production",
+    ]);
+
+    assert!(success, "{}", stdout);
+    assert_eq!(
+        repo.read_env_file("production", "platform/demo/config.yaml"),
+        Some("mode: source\n".to_string())
+    );
+}
+
+#[test]
+fn test_multi_source_preserve_rule_keeps_destination_env_values() {
+    let repo = TestRepo::new();
+    repo.create_multi_source_config_with_preserve_rule(
+        "platform/demo",
+        "config.yaml",
+        &["spec.origin", "spec.redirectUrl"],
+    );
+
+    repo.write_env_file(
+        "production",
+        "platform/demo/config.yaml",
+        "spec:\n  origin: https://prod.example.com\n  redirectUrl:\n    - https://prod.example.com/callback\n  common: old\n",
+    );
+    repo.write_env_file(
+        "staging-a",
+        "platform/demo/config.yaml",
+        "spec:\n  origin: https://source.example.com\n  redirectUrl:\n    - https://source.example.com/callback\n  common: new\n",
+    );
+    repo.commit_all("Add preserve rule fixture");
+
+    let (success, stdout, stderr) = repo.run_prl(&[
+        "promote",
+        "--source",
+        "staging-a",
+        "--source",
+        "staging-b",
+        "--dest",
+        "production",
+    ]);
+
+    assert!(success, "stdout: {}\nstderr: {}", stdout, stderr);
+    assert!(
+        !stdout.contains("Review required before promotion."),
+        "{}",
+        stdout
+    );
+    let content = repo
+        .read_env_file("production", "platform/demo/config.yaml")
+        .expect("missing promoted config");
+    let doc: serde_yaml::Value = serde_yaml::from_str(&content).expect("invalid yaml");
+    assert_eq!(doc["spec"]["origin"], "https://prod.example.com");
+    assert_eq!(
+        doc["spec"]["redirectUrl"][0],
+        "https://prod.example.com/callback"
+    );
+    assert_eq!(doc["spec"]["common"], "new");
 }
 
 #[test]

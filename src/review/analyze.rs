@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use crate::commands::promote::{
     PromoteArgs, component_exists_in_dest, get_component, is_protected,
 };
-use crate::config::{Config, PromotionAction};
+use crate::config::{ComponentRule, Config, ConfigStrategy, PromotionAction, PromotionRules};
 use crate::error::AppResult;
 use crate::files::{FileDiscovery, FileSelector};
 use crate::review::models::{
@@ -130,6 +130,8 @@ pub fn analyze_multi_source_promotion(
         let component = candidates[0].component.clone();
         let existing_component = candidates[0].existing_component;
         let version_managed = candidates[0].version_managed;
+        let component_action = config.rules.get_action(&component);
+        let component_rule = config.rules.get_component_rule(&component);
         let candidate_sources = unique_sources(candidates);
         let identical = candidates
             .iter()
@@ -158,6 +160,37 @@ pub fn analyze_multi_source_promotion(
                     (selected.source_name.clone(), selected.absolute_path.clone()),
                 );
             }
+            continue;
+        }
+
+        if component_action == PromotionAction::Review {
+            retained_paths.insert(relative.clone());
+            upsert_review_item(
+                &mut review_map,
+                ReviewItemKind::RuleReview,
+                &component,
+                relative,
+                &candidate_sources,
+                "Component is marked action: review; classify before promoting non-version files",
+            );
+            continue;
+        }
+
+        if let Some(selected_source) = should_auto_resolve_conflict(
+            &config.rules,
+            component_rule,
+            &component,
+            relative,
+            &candidate_sources,
+        ) {
+            let selected = candidates
+                .iter()
+                .find(|candidate| candidate.source_name == selected_source)
+                .unwrap_or(&candidates[0]);
+            auto_files.insert(
+                relative.clone(),
+                (selected.source_name.clone(), selected.absolute_path.clone()),
+            );
             continue;
         }
 
@@ -291,6 +324,69 @@ fn unique_sources(candidates: &[FileCandidate]) -> Vec<String> {
         sources.insert(candidate.source_name.clone());
     }
     sources.into_iter().collect()
+}
+
+pub(crate) fn matching_preserve_paths(
+    component_rule: &ComponentRule,
+    component: &str,
+    relative: &Path,
+) -> Option<Vec<String>> {
+    let component_prefix = Path::new(component);
+    let relative_within_component = relative
+        .strip_prefix(component_prefix)
+        .ok()
+        .unwrap_or(relative)
+        .to_string_lossy()
+        .trim_start_matches('/')
+        .to_string();
+    let relative_full = relative.to_string_lossy().to_string();
+
+    for preserve in &component_rule.preserve {
+        if preserve.file.is_empty() {
+            continue;
+        }
+
+        if glob_match::glob_match(&preserve.file, &relative_within_component)
+            || glob_match::glob_match(&preserve.file, &relative_full)
+            || preserve.file == relative_within_component
+            || preserve.file == relative_full
+        {
+            return Some(preserve.paths.clone());
+        }
+    }
+
+    None
+}
+
+fn should_auto_resolve_conflict(
+    rules: &PromotionRules,
+    component_rule: Option<&ComponentRule>,
+    component: &str,
+    relative: &Path,
+    candidate_sources: &[String],
+) -> Option<String> {
+    if candidate_sources.is_empty() {
+        return None;
+    }
+
+    if candidate_sources.len() == 1 {
+        return Some(candidate_sources[0].clone());
+    }
+
+    if rules.conflict_resolution.config_strategy != ConfigStrategy::SourcePriority {
+        return None;
+    }
+
+    let component_rule = component_rule?;
+    let has_preserve = matching_preserve_paths(component_rule, component, relative)
+        .map(|paths| !paths.is_empty())
+        .unwrap_or(false);
+
+    if component_rule.action == PromotionAction::Always || has_preserve {
+        return rules.resolve_config_source(candidate_sources);
+    }
+
+    None
 }
 
 fn build_route_key(source_paths: &[(String, PathBuf)], dest: &str, filters: &[String]) -> String {

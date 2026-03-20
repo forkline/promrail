@@ -233,6 +233,22 @@ pub struct ComponentRule {
     /// Version constraint (semver range).
     #[serde(default)]
     pub version_constraint: Option<String>,
+
+    /// Preserve destination-specific configuration paths for matching files.
+    #[serde(default)]
+    pub preserve: Vec<PreserveRule>,
+}
+
+/// File-specific preserve rule for YAML/JSON promotion.
+#[derive(Debug, Deserialize, Clone, Default, ConfigDoc)]
+pub struct PreserveRule {
+    /// File path or glob relative to the component directory.
+    #[serde(default)]
+    pub file: String,
+
+    /// Dot-separated YAML/JSON paths to preserve from destination.
+    #[serde(default)]
+    pub paths: Vec<String>,
 }
 
 /// Global rules applied to all promotions.
@@ -336,6 +352,11 @@ impl PromotionRules {
         PromotionAction::Always
     }
 
+    /// Get explicit rule for a component path.
+    pub fn get_component_rule(&self, component: &str) -> Option<&ComponentRule> {
+        self.components.get(component)
+    }
+
     /// Check if a source should include a component.
     pub fn source_includes(&self, source: &str, component: &str) -> bool {
         if let Some(rule) = self.sources.get(source) {
@@ -368,6 +389,25 @@ impl PromotionRules {
     /// Get source priority (higher = higher priority).
     pub fn get_source_priority(&self, source: &str) -> u32 {
         self.sources.get(source).map(|r| r.priority).unwrap_or(0)
+    }
+
+    /// Resolve config source by source priority.
+    pub fn resolve_config_source(&self, sources: &[String]) -> Option<String> {
+        if sources.is_empty() {
+            return None;
+        }
+
+        if sources.len() == 1 {
+            return Some(sources[0].clone());
+        }
+
+        match self.conflict_resolution.config_strategy {
+            ConfigStrategy::SourcePriority => sources
+                .iter()
+                .max_by_key(|source| self.get_source_priority(source))
+                .cloned(),
+            ConfigStrategy::Merge | ConfigStrategy::Fail => None,
+        }
     }
 
     /// Resolve version conflict between sources.

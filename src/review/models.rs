@@ -13,6 +13,7 @@ pub enum ReviewArtifactStatus {
 pub enum ReviewItemKind {
     NewComponent,
     ConflictingFile,
+    RuleReview,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
