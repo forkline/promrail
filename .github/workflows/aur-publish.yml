@@ -22,13 +22,11 @@ on:
     workflows: ["Rust"]
     types:
       - completed
-    branches:
-      - v[0-9]*
 
 jobs:
   aur-publish:
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v') }}
     strategy:
       matrix:
         package:
