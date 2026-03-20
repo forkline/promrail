@@ -97,9 +97,6 @@ denylist:
 
 git:
   require_clean_tree: false
-
-audit:
-  enabled: false
 "#;
         fs::write(&self.config_path, config).expect("Failed to write config");
     }
@@ -135,9 +132,6 @@ denylist:
 
 git:
   require_clean_tree: false
-
-audit:
-  enabled: false
 "#;
         fs::write(&self.config_path, config).expect("Failed to write config");
         fs::create_dir_all(self.repo_path.join("staging-a")).expect("Failed to create staging-a");
@@ -257,9 +251,6 @@ rules:
 
 git:
   require_clean_tree: false
-
-audit:
-  enabled: false
 "#,
             homelab_path = homelab_path.display()
         );

@@ -22,7 +22,6 @@ Git-native GitOps promotion tool written in Rust.
 - **Protected directories**: Never modify `custom/`, `env/`, `local/` directories
 - **Git-native operations**: Uses `git2` for repository handling, status checks, and diffs
 - **Colored diff output**: See what would change before applying
-- **Audit logging**: Track promotions in `.promotion-log.yaml`
 - **Version management**: Extract, apply, and diff Helm chart versions and container images
 - **Snapshots**: Create restore points before applying changes with rollback support
 - **Conflict detection**: Warn on version downgrades during apply

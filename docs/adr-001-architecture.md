@@ -9,7 +9,7 @@ Accepted
 We need a Rust-based GitOps promotion tool that:
 - Promotes configuration files between environments (e.g., staging → production)
 - Supports multiple git repositories with different structures
-- Uses git-native features for diff, audit, and safety checks
+- Uses git-native features for diff and safety checks
 - Excludes certain directories (custom, env, local) from promotion
 - Allows flexible file selection via allowlist/denylist patterns
 
@@ -27,7 +27,7 @@ promrail/
 │   ├── commands/            # Command implementations
 │   ├── git/                 # Git operations
 │   ├── files/               # File selection
-│   └── audit/               # Promotion logging
+│   └── review/              # Multi-source review artifacts
 └── promrail.yaml            # Configuration file
 ```
 
@@ -61,7 +61,6 @@ Uses `git2` crate for:
 - Tree cleanliness checks (`require_clean_tree`)
 - Diff output (colored, unified format)
 - Tracked file listing (only consider git-tracked files)
-- Optional git notes for audit trail
 
 Rationale: Git is the source of truth. Leverage its machinery instead of reimplementing.
 
@@ -92,15 +91,6 @@ Rationale: Clear separation between preview (diff) and action (promote). Validat
 - Clean git tree required before promotion
 
 Rationale: Streamline promotion workflow while maintaining safety options.
-
-### 8. Audit Trail
-
-Writes `.promotion-log.yaml` with:
-- Timestamp, source/dest, user
-- List of promoted, skipped, and protected files
-- Git reference at time of promotion
-
-Rationale: Traceability for compliance and debugging.
 
 ## Alternatives Considered
 
