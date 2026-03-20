@@ -94,6 +94,19 @@ Promrail is intentionally centered on two workflows:
 
 Everything documented here supports one of those workflows directly.
 
+### `prl completions`
+
+Generate shell completions:
+
+```bash
+prl completions bash
+prl completions fish
+prl completions zsh
+prl completions elvish
+```
+
+This is also what the AUR packages install into the standard completion directories.
+
 ### `prl diff`
 
 Shows what would change without applying:

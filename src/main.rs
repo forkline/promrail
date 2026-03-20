@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
-use clap::Parser;
+use clap::{CommandFactory, Parser};
+use clap_complete::generate;
 use console::style;
 use log::{info, warn};
 
@@ -81,8 +82,15 @@ fn run(args: Cli) -> AppResult<()> {
         Some(Commands::Versions { command }) => handle_versions_command(command),
         Some(Commands::Snapshot { command }) => handle_snapshot_command(command),
         Some(Commands::Config { command }) => handle_config_command(command),
+        Some(Commands::Completions { shell }) => handle_completions_command(shell),
         _ => handle_repo_command(args),
     }
+}
+
+fn handle_completions_command(shell: clap_complete::Shell) -> AppResult<()> {
+    let mut cmd = Cli::command();
+    generate(shell, &mut cmd, "prl", &mut std::io::stdout());
+    Ok(())
 }
 
 fn handle_versions_command(command: VersionsCommands) -> AppResult<()> {
@@ -403,7 +411,8 @@ fn handle_repo_command(args: cli::Cli) -> AppResult<()> {
         }
         Some(Commands::Versions { .. })
         | Some(Commands::Snapshot { .. })
-        | Some(Commands::Config { .. }) => {
+        | Some(Commands::Config { .. })
+        | Some(Commands::Completions { .. }) => {
             unreachable!()
         }
     }
