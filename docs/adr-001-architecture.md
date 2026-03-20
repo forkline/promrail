@@ -78,10 +78,9 @@ Rationale: Compatibility with existing workflow, configurable for different use 
 ```
 prl diff --source <env> --dest <env> [filter...]
 prl promote --source <env> --dest <env> [options]
-prl validate
 ```
 
-Rationale: Clear separation between preview (diff) and action (promote). Validate for config checking.
+Rationale: Clear separation between preview (diff) and action (promote).
 
 ### 7. Safety Defaults
 
@@ -117,7 +116,7 @@ Rejected: Rust provides better type safety and git2 bindings.
 
 1. Core: CLI, config, error types, git repository handling
 2. File Selection: allowlist/denylist with globset
-3. Commands: validate, diff, promote
+3. Commands: diff, promote
 4. Git Features: native diff, notes
 5. Audit: promotion log
 

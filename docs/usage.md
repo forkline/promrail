@@ -32,13 +32,10 @@ protected_dirs:
   - env
 EOF
 
-# 2. Validate configuration
-prl validate
-
-# 3. Preview changes
+# 2. Preview changes
 prl diff --source staging --dest production
 
-# 4. Apply changes
+# 3. Apply changes
 prl promote --source staging --dest production
 ```
 
@@ -89,21 +86,6 @@ prl diff --repo work --source dev --dest prod
 | `PROMRAIL_REPO` | Default repository name |
 
 ## Commands
-
-### `prl validate`
-
-Validates the configuration file and checks that:
-- All repositories exist
-- All environments exist
-- Allowlist patterns are valid
-- Git repository is clean (if configured)
-
-```bash
-prl validate
-
-# With verbose output
-prl -v validate
-```
 
 ### `prl diff`
 

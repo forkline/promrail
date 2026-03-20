@@ -79,13 +79,7 @@ Or see all configuration options:
 prl config show
 ```
 
-2. Validate your configuration:
-
-```bash
-prl validate
-```
-
-3. Preview changes:
+2. Preview changes:
 
 ```bash
 # Diff all files
@@ -95,7 +89,7 @@ prl diff --source staging --dest production
 prl diff --source staging --dest production platform/redis-operator
 ```
 
-4. Promote (default command, applies changes immediately):
+3. Promote (default command, applies changes immediately):
 
 ```bash
 # With defaults configured, just run:
@@ -117,7 +111,6 @@ prl --confirm
 |---------|-------------|
 | `diff` | Show what would change without applying |
 | `promote` | Copy allowlisted files from source to destination |
-| `validate` | Validate configuration file |
 | `versions` | Version extraction and management |
 | `snapshot` | Snapshot management for rollbacks |
 | `config` | Configuration reference and examples |
