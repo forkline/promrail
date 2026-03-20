@@ -130,7 +130,7 @@ pub struct SourceRule {
 /// Conflict resolution strategies.
 #[derive(Debug, Deserialize, Clone, Default, ConfigDoc)]
 pub struct ConflictResolution {
-    /// Strategy for version conflicts: highest, newest, source_priority.
+    /// Strategy for version conflicts: highest, source_priority.
     #[config_doc(default = "highest", example = "highest")]
     #[serde(default)]
     pub version_strategy: VersionStrategy,
@@ -152,8 +152,6 @@ pub enum VersionStrategy {
     /// Use highest version number.
     #[default]
     Highest,
-    /// Use newest by timestamp (requires metadata).
-    Newest,
     /// Use version from highest priority source.
     SourcePriority,
 }
@@ -162,7 +160,6 @@ impl std::fmt::Display for VersionStrategy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             VersionStrategy::Highest => write!(f, "highest"),
-            VersionStrategy::Newest => write!(f, "newest"),
             VersionStrategy::SourcePriority => write!(f, "source_priority"),
         }
     }
@@ -225,10 +222,6 @@ pub struct ComponentRule {
     /// Human-readable notes for reviewers.
     #[serde(default)]
     pub notes: String,
-
-    /// Version constraint (semver range).
-    #[serde(default)]
-    pub version_constraint: Option<String>,
 
     /// Preserve destination-specific configuration paths for matching files.
     #[serde(default)]
@@ -434,10 +427,6 @@ impl PromotionRules {
                     .max_by_key(|(source, _)| self.get_source_priority(source))
                     .cloned()
             }
-            VersionStrategy::Newest => {
-                // Not implemented - would require timestamp metadata
-                versions.first().cloned()
-            }
         }
     }
 }
@@ -485,11 +474,6 @@ impl RepoConfig {
         shellexpand::full(&self.path)
             .map(|p| PathBuf::from(p.as_ref()))
             .unwrap_or_else(|_| PathBuf::from(&self.path))
-    }
-
-    /// Check if this repo has environments defined (v1 style).
-    pub fn has_environments(&self) -> bool {
-        !self.environments.is_empty()
     }
 }
 
@@ -620,19 +604,6 @@ impl Config {
         self.repos
             .get_key_value(repo_name)
             .ok_or_else(|| crate::error::PromrailError::RepoNotFound(repo_name.to_string()))
-    }
-
-    /// Get first repo name (for single-repo configs).
-    pub fn first_repo(&self) -> Option<(&String, &RepoConfig)> {
-        if self.is_single_repo() {
-            return self.get_repo(None).ok();
-        }
-        self.repos.iter().next()
-    }
-
-    /// Check if using v2 style (standalone repos without environments).
-    pub fn is_v2_style(&self) -> bool {
-        self.repos.values().all(|r| r.environments.is_empty())
     }
 
     /// Generate full configuration documentation including environment variables.
