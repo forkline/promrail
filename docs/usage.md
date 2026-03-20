@@ -764,7 +764,7 @@ items:
 
 #### Classify The Artifact
 
-Use opencode or edit the YAML directly:
+Use a coding agent or edit the YAML directly:
 
 ```yaml
 status: classified
@@ -877,12 +877,71 @@ rules:
             - spec.externalConfig
 ```
 
-Recommended workflow with opencode:
+Recommended workflow with a coding agent:
 
 1. run a promotion once and inspect the env-specific diff
 2. identify the paths that must always stay destination-specific
-3. ask opencode to add `preserve` rules for those paths in `promrail.yaml`
+3. ask the agent to add `preserve` rules for those paths in `promrail.yaml`
 4. rerun `prl`; future promotions keep those destination paths automatically
+
+### Post-Promotion Rule Tuning
+
+When `prl --force` still leaves environment-specific changes in the diff, the recommended loop is:
+
+```bash
+# 1. Run the promotion
+prl --force
+
+# 2. Inspect the diff
+git diff
+
+# 3. Update promrail.yaml with preserve/denylist rules
+
+# 4. Reset only the affected destination files
+git checkout -- <affected-files>
+
+# 5. Re-run the promotion with the new rules
+prl --force
+```
+
+Use `preserve` when a file mixes common and environment-specific config.
+
+Use `denylist` when a file is fully environment-specific or not safe to auto-merge, such as Helm-template-heavy manifests that cannot be preserved reliably with path-based rules.
+
+Example agent prompt:
+
+```text
+Inspect the current git diff after `prl --force`.
+
+Goal:
+- keep common promoted changes
+- prevent environment-specific config from being promoted again in future runs
+- avoid manual review for the same issue next time
+
+What to do:
+1. Analyze the current diff file by file.
+2. Identify which changes are:
+   - common/shared and should keep promoting
+   - environment-specific and should stay destination-specific
+   - fully environment-specific files that should not be promoted at all
+3. Update `promrail.yaml` accordingly:
+   - add `rules.components.<component>.preserve` entries for YAML/JSON paths that should remain destination-specific
+   - add `denylist` entries for files that are entirely environment-specific or not safe to auto-merge
+   - keep using `action: always` where automatic promotion should continue
+4. After updating `promrail.yaml`, reset only the affected destination files whose env-specific changes should be re-evaluated.
+5. Run `prl --force` again.
+6. Review the new diff and verify that:
+   - the env-specific values are preserved
+   - the common changes are still promoted
+   - formatting-only YAML churn is avoided
+
+Important constraints:
+- Do not commit anything.
+- Do not revert unrelated changes.
+- Prefer automatic rules over review artifacts.
+- For Helm-template-heavy files that are not safe for path preservation, use `denylist`.
+- Keep `promrail.yaml` as the only config file to encode these decisions.
+```
 
 ### Automation Script
 
@@ -907,13 +966,11 @@ EOF
   --dry-run
 ```
 
-### Opencode Integration
+### Agent Integration
 
-When using opencode AI assistant, it will:
+Any coding agent can help with promotion tuning by:
 
-1. Read `promrail.yaml` rules automatically
-2. Apply `action: always` without question
-3. Remove `action: never` components
-4. Flag `action: review` items for your attention
-
-See [AGENTS.md](../AGENTS.md) for guidelines.
+1. reading `promrail.yaml`
+2. identifying env-specific drift in `git diff`
+3. converting repeated review cases into `preserve` or `denylist` rules
+4. rerunning `prl --force` to verify the rules work as intended
