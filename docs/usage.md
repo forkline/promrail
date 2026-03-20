@@ -887,29 +887,6 @@ Important constraints:
 - Keep `promrail.yaml` as the only config file to encode these decisions.
 ```
 
-### Automation Script
-
-Use the provided script for non-interactive promotion:
-
-```bash
-# Create sources file
-cat > sources.txt << EOF
-~/gitops/staging-homelab
-~/gitops/staging-work
-EOF
-
-# Run promotion
-./scripts/promote-complex.sh \
-  --sources sources.txt \
-  --dest ~/gitops/production
-
-# Dry run first
-./scripts/promote-complex.sh \
-  --sources sources.txt \
-  --dest ~/gitops/production \
-  --dry-run
-```
-
 ### Agent Integration
 
 Any coding agent can help with promotion tuning by:
