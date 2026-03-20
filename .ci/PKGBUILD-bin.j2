@@ -15,4 +15,14 @@ sha256sums=('{{ checksum }}')
 
 package() {
 	install -Dm755 prl "${pkgdir}/usr/bin/prl"
+
+	install -d "${pkgdir}/usr/share/bash-completion/completions"
+	install -d "${pkgdir}/usr/share/fish/vendor_completions.d"
+	install -d "${pkgdir}/usr/share/zsh/site-functions"
+	install -d "${pkgdir}/usr/share/elvish/lib"
+
+	./prl completions bash > "${pkgdir}/usr/share/bash-completion/completions/prl"
+	./prl completions fish > "${pkgdir}/usr/share/fish/vendor_completions.d/prl.fish"
+	./prl completions zsh > "${pkgdir}/usr/share/zsh/site-functions/_prl"
+	./prl completions elvish > "${pkgdir}/usr/share/elvish/lib/prl.elv"
 }

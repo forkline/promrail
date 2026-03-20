@@ -133,6 +133,7 @@ prl --confirm
 | `versions` | Version extraction and management |
 | `snapshot` | Snapshot management for rollbacks |
 | `config` | Configuration reference and examples |
+| `completions` | Generate shell completions |
 
 ### Version Management
 
@@ -164,6 +165,17 @@ prl snapshot show <id> --path ~/gitops/production
 # Rollback to a snapshot
 prl snapshot rollback <id> --path ~/gitops/production
 
+```
+
+### Shell Completions
+
+Generate shell completions directly from the CLI:
+
+```bash
+prl completions bash
+prl completions fish
+prl completions zsh
+prl completions elvish
 ```
 
 ### Multi-Source Merge

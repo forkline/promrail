@@ -530,6 +530,21 @@ fn test_repo_not_found_error() {
 }
 
 #[test]
+fn test_completions_command_outputs_shell_script() {
+    let repo = TestRepo::new();
+
+    let (success, stdout, _stderr) = repo.run_prl(&["completions", "bash"]);
+
+    assert!(success, "{}", stdout);
+    assert!(stdout.contains("prl"), "{}", stdout);
+    assert!(
+        stdout.contains("complete") || stdout.contains("compgen"),
+        "{}",
+        stdout
+    );
+}
+
+#[test]
 fn test_diff_shows_new_file() {
     let repo = TestRepo::new();
     repo.create_config();
