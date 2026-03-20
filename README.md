@@ -26,6 +26,25 @@ Git-native GitOps promotion tool written in Rust.
 - **Snapshots**: Create restore points before applying changes with rollback support
 - **Conflict detection**: Warn on version downgrades during apply
 
+## Supported Workflows
+
+Promrail is now intentionally focused on two workflows:
+
+- **Simple promotion**: copy and reconcile allowlisted files from one source environment to one destination
+- **3-way / multi-source promotion**: combine common changes from multiple sources, preserve destination-specific config where configured, and stop for review only when rules cannot resolve ambiguity safely
+
+The main supported commands are:
+
+- `prl diff`
+- `prl` / `prl promote`
+- `prl versions extract`
+- `prl versions merge`
+- `prl versions apply`
+- `prl snapshot list|show|rollback`
+- `prl config show|example`
+
+Promrail no longer includes separate maintenance commands for config diffing, version diffing, promotion logs, or standalone validation.
+
 ## Installation
 
 ### Cargo
@@ -207,6 +226,13 @@ rules:
 ```
 
 This is designed for agent-generated rules: inspect a real promotion diff once, identify env-specific paths, write them into `promrail.yaml`, and let future promotions run automatically.
+
+### Current Limits
+
+- `preserve` rules work best for normal YAML and JSON files
+- Helm-template-heavy files can still be too dynamic for safe path-level preservation
+- for those files, prefer `denylist` until a safer template-aware merge exists
+- snapshots remain the main rollback mechanism; there is no separate promotion log anymore
 
 After `prl --force`, a practical loop is:
 

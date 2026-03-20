@@ -258,6 +258,107 @@ git:
         fs::create_dir_all(self.repo_path.join("nbg1-c01")).expect("Failed to create nbg1-c01");
     }
 
+    fn create_current_gitops_like_config(&self) {
+        let homelab_path = self.repo_path.join("homelab");
+        fs::create_dir_all(&homelab_path).expect("Failed to create homelab dir");
+
+        let config = format!(
+            r#"version: 1
+
+repos:
+  gitops:
+    path: .
+    environments:
+      grigri-cloud: {{path: grigri.cloud}}
+      nbg1-c01: {{path: nbg1-c01}}
+
+  homelab:
+    path: {homelab_path}
+    environments:
+      default: {{path: .}}
+
+default_repo: gitops
+default_sources:
+  - grigri-cloud
+  - homelab
+default_dest: nbg1-c01
+
+protected_dirs:
+  - custom
+  - env
+
+allowlist:
+  - "**/*.yaml"
+  - "**/*.yml"
+  - "**/*.json"
+
+denylist:
+  - "**/secret.yaml"
+  - "**/secret.yml"
+  - "**/secrets.yaml"
+  - "**/secrets.yml"
+  - "**/secret.json"
+  - "**/secrets.json"
+  - "**/secrets/**"
+  - "**/charts/**"
+  - "**/values-images.yaml"
+  - "platform/velero/templates/cross-backup/**"
+  - "platform/velero/templates/cross-backup-bis/**"
+  - "platform/vault/templates/vault.yaml"
+
+rules:
+  sources:
+    grigri-cloud:
+      priority: 1
+      include:
+        - "apps/*"
+        - "platform/*"
+
+    homelab:
+      priority: 2
+      include:
+        - "platform/*"
+
+  conflict_resolution:
+    version_strategy: source_priority
+    config_strategy: source_priority
+    source_order:
+      - homelab
+      - grigri-cloud
+
+  components:
+    apps/landing:
+      action: never
+      notes: "Local only - nbg1-c01 specific"
+    platform/headscale:
+      action: never
+      notes: "Local only - nbg1-c01 specific"
+    apps/home-assistant:
+      action: never
+      notes: "Homelab specific - not for nbg1-c01"
+
+  global:
+    exclude:
+      - "*/custom/*"
+      - "*/env/*"
+      - "*/charts/*"
+    promote_options:
+      allow_duplicates: false
+      only_existing: true
+      no_delete: true
+
+git:
+  require_clean_tree: false
+"#,
+            homelab_path = homelab_path.display()
+        );
+
+        fs::write(&self.config_path, config).expect("Failed to write current gitops-like config");
+        fs::create_dir_all(self.repo_path.join("grigri.cloud"))
+            .expect("Failed to create grigri.cloud");
+        fs::create_dir_all(self.repo_path.join("nbg1-c01")).expect("Failed to create nbg1-c01");
+    }
+
     fn write_env_file(&self, env_root: &str, relative_path: &str, content: &str) {
         let path = self.repo_path.join(env_root).join(relative_path);
         if let Some(parent) = path.parent() {
@@ -1567,6 +1668,88 @@ fn test_realistic_gitops_workflow_no_delete_does_not_record_deleted_files_in_sna
         "snapshot should not record deletions when no_delete is active: {}",
         snapshot
     );
+}
+
+#[test]
+fn test_current_gitops_like_workflow_promotes_external_secrets_version() {
+    let repo = TestRepo::new();
+    repo.create_current_gitops_like_config();
+
+    repo.write_env_file(
+        "nbg1-c01",
+        "platform/external-secrets/kustomization.yaml",
+        "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nhelmCharts:\n  - name: external-secrets\n    version: 2.1.0\n",
+    );
+    repo.write_env_file(
+        "homelab",
+        "platform/external-secrets/kustomization.yaml",
+        "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nhelmCharts:\n  - name: external-secrets\n    version: 2.4.0\n",
+    );
+    repo.commit_all("Add external-secrets version bump fixture");
+
+    let (success, stdout, _stderr) = repo.run_prl(&["promote", "external-secrets"]);
+
+    assert!(success, "{}", stdout);
+    let updated = repo
+        .read_env_file("nbg1-c01", "platform/external-secrets/kustomization.yaml")
+        .expect("missing kustomization");
+    assert!(updated.contains("version: 2.4.0"), "{}", updated);
+}
+
+#[test]
+fn test_current_gitops_like_workflow_denylist_does_not_block_external_secrets_component() {
+    let repo = TestRepo::new();
+    repo.create_current_gitops_like_config();
+
+    repo.write_env_file(
+        "homelab",
+        "platform/external-secrets/resources/clustersecretstore.yaml",
+        "kind: ClusterSecretStore\nmetadata:\n  name: external-secrets\n",
+    );
+    repo.write_env_file(
+        "nbg1-c01",
+        "platform/external-secrets/resources/clustersecretstore.yaml",
+        "kind: ClusterSecretStore\nmetadata:\n  name: old\n",
+    );
+    repo.commit_all("Add external-secrets denylist fixture");
+
+    let (success, stdout, _stderr) = repo.run_prl(&["promote", "external-secrets"]);
+
+    assert!(success, "{}", stdout);
+    let updated = repo
+        .read_env_file(
+            "nbg1-c01",
+            "platform/external-secrets/resources/clustersecretstore.yaml",
+        )
+        .expect("missing clustersecretstore");
+    assert!(updated.contains("name: external-secrets"), "{}", updated);
+}
+
+#[test]
+fn test_current_gitops_like_workflow_denylists_vault_template_heavy_file() {
+    let repo = TestRepo::new();
+    repo.create_current_gitops_like_config();
+
+    repo.write_env_file(
+        "homelab",
+        "platform/vault/templates/vault.yaml",
+        "namespace: {{ .Release.Namespace }}\nvalue: homelab\n",
+    );
+    repo.write_env_file(
+        "nbg1-c01",
+        "platform/vault/templates/vault.yaml",
+        "namespace: {{ .Release.Namespace }}\nvalue: prod\n",
+    );
+    repo.commit_all("Add vault template denylist fixture");
+
+    let (success, stdout, _stderr) = repo.run_prl(&["promote", "vault"]);
+
+    assert!(success, "{}", stdout);
+    assert!(stdout.contains("No changes to promote"), "{}", stdout);
+    let content = repo
+        .read_env_file("nbg1-c01", "platform/vault/templates/vault.yaml")
+        .expect("missing vault template");
+    assert!(content.contains("value: prod"), "{}", content);
 }
 
 // =============================================================================

@@ -87,6 +87,13 @@ prl diff --repo work --source dev --dest prod
 
 ## Commands
 
+Promrail is intentionally centered on two workflows:
+
+- simple source -> destination promotion with `prl diff` and `prl promote`
+- multi-source / 3-way promotion with `prl`, review artifacts, preserve rules, and snapshots
+
+Everything documented here supports one of those workflows directly.
+
 ### `prl diff`
 
 Shows what would change without applying:
@@ -193,6 +200,25 @@ prl --log-level error promote --source staging --dest production
 ```
 
 Levels: `error`, `warn`, `info` (default), `debug`, `trace`
+
+## Supported Workflow Boundaries
+
+Promrail is designed to automate common GitOps promotion safely, not every possible YAML merge.
+
+Use these defaults:
+
+- use `preserve` for normal YAML/JSON files that mix common and environment-specific values
+- use `denylist` for files that are fully environment-specific
+- use `denylist` for Helm-template-heavy files when path preservation is not reliable enough
+- use review artifacts only when rules cannot safely automate the decision yet
+
+Examples of values that usually belong in `preserve` rules:
+
+- ingress hosts and domains
+- OAuth/OIDC origins and redirect URLs
+- storage class and requested storage size
+- node selectors and placement
+- nested destination-specific auth or integration config
 
 ## File Selection
 
