@@ -427,8 +427,6 @@ rules:
   # Global rules
   global:
     exclude: ["*/custom/*", "*/env/*"]
-    version_rules:
-      allow_downgrade: false
 ```
 
 Actions: `always` (promote), `review` (flag for review), `never` (exclude).
