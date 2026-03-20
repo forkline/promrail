@@ -96,6 +96,102 @@ audit:
         fs::write(&self.config_path, config).expect("Failed to write config");
     }
 
+    fn create_multi_source_config(&self) {
+        let config = r#"
+version: 1
+
+repos:
+  test:
+    path: .
+    environments:
+      staging-a:
+        path: staging-a
+      staging-b:
+        path: staging-b
+      production:
+        path: production
+
+default_repo: test
+
+protected_dirs:
+  - custom
+  - env
+  - local
+
+allowlist:
+  - "**/*.yaml"
+
+denylist:
+  - "**/secrets*"
+  - "**/*secret*"
+
+git:
+  require_clean_tree: false
+
+audit:
+  enabled: false
+"#;
+        fs::write(&self.config_path, config).expect("Failed to write config");
+        fs::create_dir_all(self.repo_path.join("staging-a")).expect("Failed to create staging-a");
+        fs::create_dir_all(self.repo_path.join("staging-b")).expect("Failed to create staging-b");
+    }
+
+    fn write_env_file(&self, env_root: &str, relative_path: &str, content: &str) {
+        let path = self.repo_path.join(env_root).join(relative_path);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("Failed to create parent dir");
+        }
+        fs::write(&path, content).expect("Failed to write env file");
+    }
+
+    fn read_env_file(&self, env_root: &str, relative_path: &str) -> Option<String> {
+        let path = self.repo_path.join(env_root).join(relative_path);
+        if path.exists() {
+            Some(fs::read_to_string(&path).expect("Failed to read env file"))
+        } else {
+            None
+        }
+    }
+
+    fn review_artifact_path(&self) -> Option<PathBuf> {
+        let review_dir = self.repo_path.join(".promrail/review");
+        if !review_dir.exists() {
+            return None;
+        }
+
+        fs::read_dir(review_dir)
+            .expect("Failed to read review dir")
+            .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+            .find(|path| path.extension().and_then(|ext| ext.to_str()) == Some("yaml"))
+    }
+
+    fn classify_review_artifact(&self, decision: &str, selected_source: &str) {
+        let path = self
+            .review_artifact_path()
+            .expect("Missing review artifact");
+        let content = fs::read_to_string(&path).expect("Failed to read artifact");
+        let mut doc: serde_yaml::Value =
+            serde_yaml::from_str(&content).expect("Failed to parse artifact");
+
+        doc["status"] = serde_yaml::Value::String("classified".to_string());
+
+        if let Some(items) = doc
+            .get_mut("items")
+            .and_then(|value| value.as_sequence_mut())
+        {
+            for item in items {
+                item["decision"] = serde_yaml::Value::String(decision.to_string());
+                item["selected_source"] = serde_yaml::Value::String(selected_source.to_string());
+            }
+        }
+
+        fs::write(
+            &path,
+            serde_yaml::to_string(&doc).expect("Failed to serialize artifact"),
+        )
+        .expect("Failed to write artifact");
+    }
+
     fn write_staging_file(&self, relative_path: &str, content: &str) {
         let path = self.staging_path.join(relative_path);
         if let Some(parent) = path.parent() {
@@ -740,6 +836,178 @@ fn test_promote_multiple_files() {
     assert!(repo.production_file_exists("platform/a.yaml"));
     assert!(repo.production_file_exists("platform/b.yaml"));
     assert!(repo.production_file_exists("platform/c.yaml"));
+}
+
+// =============================================================================
+// AUTO REVIEW ARTIFACT TESTS
+// =============================================================================
+
+#[test]
+fn test_multi_source_new_component_creates_review_artifact() {
+    let repo = TestRepo::new();
+    repo.create_multi_source_config();
+
+    repo.write_env_file("staging-a", "apps/demo/config.yaml", "name: demo\n");
+    repo.commit_all("Add new demo app");
+
+    let (success, stdout, _stderr) = repo.run_prl(&[
+        "promote",
+        "--source",
+        "staging-a",
+        "--source",
+        "staging-b",
+        "--dest",
+        "production",
+    ]);
+
+    assert!(success);
+    assert!(
+        stdout.contains("Review required before promotion."),
+        "{}",
+        stdout
+    );
+    assert!(repo.review_artifact_path().is_some());
+    assert_eq!(
+        repo.read_env_file("production", "apps/demo/config.yaml"),
+        None
+    );
+}
+
+#[test]
+fn test_multi_source_classified_artifact_is_consumed_automatically() {
+    let repo = TestRepo::new();
+    repo.create_multi_source_config();
+
+    repo.write_env_file("staging-a", "apps/demo/config.yaml", "name: demo\n");
+    repo.commit_all("Add new demo app");
+
+    let (_success, _stdout, _stderr) = repo.run_prl(&[
+        "promote",
+        "--source",
+        "staging-a",
+        "--source",
+        "staging-b",
+        "--dest",
+        "production",
+    ]);
+
+    repo.classify_review_artifact("promote", "staging-a");
+
+    let (success, stdout, _stderr) = repo.run_prl(&[
+        "promote",
+        "--source",
+        "staging-a",
+        "--source",
+        "staging-b",
+        "--dest",
+        "production",
+    ]);
+
+    assert!(success, "{}", stdout);
+    assert_eq!(
+        repo.read_env_file("production", "apps/demo/config.yaml"),
+        Some("name: demo\n".to_string())
+    );
+
+    let artifact_path = repo.review_artifact_path().expect("Missing artifact");
+    let artifact = fs::read_to_string(artifact_path).expect("Failed to read artifact");
+    assert!(artifact.contains("status: applied"), "{}", artifact);
+}
+
+#[test]
+fn test_multi_source_stale_artifact_requires_fresh_review() {
+    let repo = TestRepo::new();
+    repo.create_multi_source_config();
+
+    repo.write_env_file("staging-a", "apps/demo/config.yaml", "name: demo\n");
+    repo.commit_all("Add new demo app");
+
+    let (_success, _stdout, _stderr) = repo.run_prl(&[
+        "promote",
+        "--source",
+        "staging-a",
+        "--source",
+        "staging-b",
+        "--dest",
+        "production",
+    ]);
+
+    repo.classify_review_artifact("promote", "staging-a");
+    repo.write_env_file(
+        "staging-a",
+        "apps/demo/config.yaml",
+        "name: demo\nversion: 2\n",
+    );
+
+    let (success, stdout, _stderr) = repo.run_prl(&[
+        "promote",
+        "--source",
+        "staging-a",
+        "--source",
+        "staging-b",
+        "--dest",
+        "production",
+    ]);
+
+    assert!(success);
+    assert!(
+        stdout.contains("Review required before promotion."),
+        "{}",
+        stdout
+    );
+    assert_eq!(
+        repo.read_env_file("production", "apps/demo/config.yaml"),
+        None
+    );
+
+    let artifact_path = repo.review_artifact_path().expect("Missing artifact");
+    let artifact = fs::read_to_string(artifact_path).expect("Failed to read artifact");
+    assert!(artifact.contains("status: pending"), "{}", artifact);
+}
+
+#[test]
+fn test_multi_source_version_only_changes_do_not_require_review() {
+    let repo = TestRepo::new();
+    repo.create_multi_source_config();
+
+    repo.write_env_file(
+        "production",
+        "platform/api/values.yaml",
+        "image:\n  repository: ghcr.io/demo/api\n  tag: 1.0.0\n",
+    );
+    repo.write_env_file(
+        "staging-a",
+        "platform/api/values.yaml",
+        "image:\n  repository: ghcr.io/demo/api\n  tag: 1.1.0\n",
+    );
+    repo.write_env_file(
+        "staging-b",
+        "platform/api/values.yaml",
+        "image:\n  repository: ghcr.io/demo/api\n  tag: 1.2.0\n",
+    );
+    repo.commit_all("Add api values files");
+
+    let (success, stdout, _stderr) = repo.run_prl(&[
+        "promote",
+        "--source",
+        "staging-a",
+        "--source",
+        "staging-b",
+        "--dest",
+        "production",
+    ]);
+
+    assert!(success, "{}", stdout);
+    assert!(
+        !stdout.contains("Review required before promotion."),
+        "{}",
+        stdout
+    );
+    assert!(repo.review_artifact_path().is_none());
+    assert_eq!(
+        repo.read_env_file("production", "platform/api/values.yaml"),
+        Some("image:\n  repository: ghcr.io/demo/api\n  tag: 1.2.0\n".to_string())
+    );
 }
 
 // =============================================================================
