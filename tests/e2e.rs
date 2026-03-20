@@ -425,7 +425,7 @@ fn test_repo_not_found_error() {
     let repo = TestRepo::new();
     repo.create_config();
 
-    let (success, _stdout, stderr) = repo.run_prl(&["--repo", "nonexistent", "validate"]);
+    let (success, _stdout, stderr) = repo.run_prl(&["--repo", "nonexistent", "diff"]);
 
     assert!(!success);
     assert!(stderr.contains("RepoNotFound") || stderr.contains("not found in config"));
@@ -922,10 +922,10 @@ fn test_log_level_option() {
     let repo = TestRepo::new();
     repo.create_config();
 
-    let (success, _stdout, _stderr) = repo.run_prl(&["--log-level", "debug", "validate"]);
+    let (success, _stdout, _stderr) = repo.run_prl(&["--log-level", "debug", "config", "show"]);
     assert!(success);
 
-    let (success, _stdout, _stderr) = repo.run_prl(&["--log-level", "error", "validate"]);
+    let (success, _stdout, _stderr) = repo.run_prl(&["--log-level", "error", "config", "show"]);
     assert!(success);
 }
 
@@ -1640,7 +1640,7 @@ fn test_config_not_found_error() {
     let repo = TestRepo::new();
     // Don't create config
 
-    let (success, _stdout, stderr) = repo.run_prl(&["validate"]);
+    let (success, _stdout, stderr) = repo.run_prl(&["diff"]);
 
     assert!(!success);
     assert!(stderr.contains("Config") || stderr.contains("not found"));

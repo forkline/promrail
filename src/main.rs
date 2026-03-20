@@ -401,9 +401,6 @@ fn handle_repo_command(args: cli::Cli) -> AppResult<()> {
 
             commands::promote::execute(&config, &repo, &promote_args)?;
         }
-        Some(Commands::Validate {}) => {
-            commands::validate::execute(&config, &repo)?;
-        }
         Some(Commands::Versions { .. })
         | Some(Commands::Snapshot { .. })
         | Some(Commands::Config { .. }) => {

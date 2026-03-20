@@ -120,9 +120,6 @@ pub enum Commands {
     #[command(about = "Copy allowlisted files from source to destination (default)")]
     Promote {},
 
-    #[command(about = "Validate configuration file")]
-    Validate {},
-
     #[command(about = "Version extraction and management")]
     Versions {
         #[command(subcommand)]
