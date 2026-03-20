@@ -241,9 +241,6 @@ rules:
       - "*/custom/*"
       - "*/env/*"
       - "*/charts/*"
-    version_rules:
-      allow_downgrade: false
-      allow_prerelease: false
     promote_options:
       allow_duplicates: false
       only_existing: true

@@ -629,9 +629,6 @@ rules:
     exclude:
       - "*/custom/*"
       - "*/env/*"
-    version_rules:
-      allow_downgrade: false
-      allow_prerelease: false
 ```
 
 ### Workflow

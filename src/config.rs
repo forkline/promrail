@@ -251,10 +251,6 @@ pub struct GlobalRules {
     #[serde(default)]
     pub review_required: Vec<String>,
 
-    /// Version change rules.
-    #[serde(default)]
-    pub version_rules: VersionRules,
-
     /// Multi-source promotion options.
     #[serde(default)]
     pub promote_options: PromoteOptions,
@@ -290,24 +286,6 @@ pub struct PromoteOptions {
 
 fn default_ignore_gitignore() -> bool {
     true
-}
-
-/// Version change rules.
-#[derive(Debug, Deserialize, Clone, Default, ConfigDoc)]
-pub struct VersionRules {
-    /// Allow version downgrades.
-    #[config_doc(default = "false")]
-    #[serde(default)]
-    pub allow_downgrade: bool,
-
-    /// Allow pre-release versions in production.
-    #[config_doc(default = "false")]
-    #[serde(default)]
-    pub allow_prerelease: bool,
-
-    /// Minimum version age before promotion (hours).
-    #[serde(default)]
-    pub min_age_hours: Option<u32>,
 }
 
 impl PromotionRules {
