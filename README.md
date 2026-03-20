@@ -194,7 +194,7 @@ prl
 # 2. If review is needed, promrail prints the artifact path
 #    Example: .promrail/review/grigri_cloud__homelab__nbg1_c01.yaml
 
-# 3. Classify the artifact with opencode or by editing the YAML
+# 3. Classify the artifact with a coding agent or by editing the YAML
 #    - set status: classified
 #    - set each item decision: promote | skip
 #    - set selected_source for promoted conflicting items
@@ -219,9 +219,54 @@ rules:
             - spec.redirectUrl
 ```
 
-This is designed for opencode-generated rules: inspect a real promotion diff once, identify env-specific paths, write them into `promrail.yaml`, and let future promotions run automatically.
+This is designed for agent-generated rules: inspect a real promotion diff once, identify env-specific paths, write them into `promrail.yaml`, and let future promotions run automatically.
 
-See [AGENTS.md](AGENTS.md) for opencode AI assistant guidelines.
+After `prl --force`, a practical loop is:
+
+```bash
+# 1. Apply the promotion
+prl --force
+
+# 2. Inspect what changed
+git diff
+
+# 3. Update promrail.yaml with preserve/denylist rules
+#    for the env-specific parts of the diff
+
+# 4. Reset only the affected destination files
+git checkout -- <affected-files>
+
+# 5. Re-run the promotion with the new rules
+prl --force
+```
+
+You can hand the rule-tuning step to any coding agent with a prompt like:
+
+```text
+Inspect the current git diff after `prl --force`.
+
+Goal:
+- keep common promoted changes
+- prevent environment-specific config from being promoted again in future runs
+- avoid manual review for the same issue next time
+
+What to do:
+1. Analyze the current diff file by file.
+2. Identify which changes are common/shared, which are environment-specific fields inside mixed files, and which files are fully environment-specific.
+3. Update `promrail.yaml` accordingly:
+   - add `rules.components.<component>.preserve` entries for YAML/JSON paths that should remain destination-specific
+   - add `denylist` entries for files that are entirely environment-specific or not safe to auto-merge
+   - keep using `action: always` where automatic promotion should continue
+4. Reset only the affected destination files whose env-specific changes should be re-evaluated.
+5. Run `prl --force` again.
+6. Verify that the new diff preserves env-specific values while still promoting common changes.
+
+Important constraints:
+- Do not commit anything.
+- Do not revert unrelated changes.
+- Prefer automatic rules over review artifacts.
+- For Helm-template-heavy files that are not safe for path preservation, use `denylist`.
+```
 
 ### Config Reference
 
