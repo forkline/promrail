@@ -68,8 +68,23 @@ impl FileSelector {
 
     /// Check if a path should be promoted (allowlist && !denylist && !protected).
     pub fn should_promote(&self, path: &Path, include_protected: bool) -> bool {
+        if Self::is_internal_metadata(path) {
+            return false;
+        }
+
         let protected_ok = include_protected || !self.is_protected(path);
         protected_ok && !self.matches_denylist(path) && self.matches_allowlist(path)
+    }
+
+    fn is_internal_metadata(path: &Path) -> bool {
+        if path.starts_with(".promrail") {
+            return true;
+        }
+
+        matches!(
+            path.file_name().and_then(|name| name.to_str()),
+            Some(".promotion-snapshots.yaml" | ".promotion-log.yaml")
+        )
     }
 
     /// Check if a path matches any of the filter patterns (regex or substring).
@@ -93,5 +108,25 @@ impl FileSelector {
                 path_str.contains(trimmed)
             }
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FileSelector;
+    use std::path::Path;
+
+    #[test]
+    fn internal_metadata_is_never_promoted() {
+        let selector = FileSelector {
+            allowlist: globset::GlobSetBuilder::new().build().expect("globset"),
+            denylist: globset::GlobSetBuilder::new().build().expect("globset"),
+            protected_dirs: Vec::new(),
+        };
+
+        assert!(!selector.should_promote(Path::new(".promotion-snapshots.yaml"), false));
+        assert!(!selector.should_promote(Path::new(".promotion-log.yaml"), false));
+        assert!(!selector.should_promote(Path::new(".promrail/review/test.yaml"), false));
+        assert!(selector.should_promote(Path::new("platform/app/config.yaml"), false));
     }
 }

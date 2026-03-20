@@ -136,6 +136,105 @@ audit:
         fs::create_dir_all(self.repo_path.join("staging-b")).expect("Failed to create staging-b");
     }
 
+    fn create_realistic_gitops_config(&self) {
+        let homelab_path = self.repo_path.join("homelab");
+        fs::create_dir_all(&homelab_path).expect("Failed to create homelab dir");
+
+        let config = format!(
+            r#"version: 1
+
+repos:
+  gitops:
+    path: .
+    environments:
+      grigri-cloud: {{path: grigri.cloud}}
+      nbg1-c01: {{path: nbg1-c01}}
+
+  homelab:
+    path: {homelab_path}
+    environments:
+      default: {{path: .}}
+
+default_repo: gitops
+default_sources:
+  - grigri-cloud
+  - homelab
+default_dest: nbg1-c01
+
+protected_dirs:
+  - custom
+  - env
+
+allowlist:
+  - "**/*.yaml"
+  - "**/*.yml"
+  - "**/*.json"
+
+denylist:
+  - "**/*secret*"
+  - "**/secrets/**"
+  - "**/charts/**"
+  - "**/values-images.yaml"
+
+rules:
+  sources:
+    grigri-cloud:
+      priority: 1
+      include:
+        - "apps/*"
+        - "platform/*"
+
+    homelab:
+      priority: 2
+      include:
+        - "platform/*"
+
+  conflict_resolution:
+    version_strategy: source_priority
+    config_strategy: source_priority
+    source_order:
+      - homelab
+      - grigri-cloud
+
+  components:
+    apps/landing:
+      action: never
+      notes: "Local only - nbg1-c01 specific"
+    platform/headscale:
+      action: never
+      notes: "Local only - nbg1-c01 specific"
+    apps/home-assistant:
+      action: never
+      notes: "Homelab specific - not for nbg1-c01"
+
+  global:
+    exclude:
+      - "*/custom/*"
+      - "*/env/*"
+      - "*/charts/*"
+    version_rules:
+      allow_downgrade: false
+      allow_prerelease: false
+    promote_options:
+      allow_duplicates: false
+      only_existing: true
+      no_delete: true
+
+git:
+  require_clean_tree: false
+
+audit:
+  enabled: false
+"#,
+            homelab_path = homelab_path.display()
+        );
+
+        fs::write(&self.config_path, config).expect("Failed to write realistic config");
+        fs::create_dir_all(self.repo_path.join("grigri.cloud"))
+            .expect("Failed to create grigri.cloud");
+        fs::create_dir_all(self.repo_path.join("nbg1-c01")).expect("Failed to create nbg1-c01");
+    }
+
     fn write_env_file(&self, env_root: &str, relative_path: &str, content: &str) {
         let path = self.repo_path.join(env_root).join(relative_path);
         if let Some(parent) = path.parent() {
@@ -190,6 +289,32 @@ audit:
             serde_yaml::to_string(&doc).expect("Failed to serialize artifact"),
         )
         .expect("Failed to write artifact");
+    }
+
+    fn read_snapshot_file(&self, env_root: &str) -> Option<String> {
+        let path = self
+            .repo_path
+            .join(env_root)
+            .join(".promotion-snapshots.yaml");
+        if path.exists() {
+            Some(fs::read_to_string(path).expect("Failed to read snapshot file"))
+        } else {
+            None
+        }
+    }
+
+    fn snapshot_ids(&self, env_root: &str) -> Vec<String> {
+        let content = self
+            .read_snapshot_file(env_root)
+            .expect("Snapshot file should exist");
+        let doc: serde_yaml::Value = serde_yaml::from_str(&content).expect("Invalid snapshot yaml");
+        doc.get("snapshots")
+            .and_then(|value| value.as_sequence())
+            .into_iter()
+            .flatten()
+            .filter_map(|snapshot| snapshot.get("id").and_then(|id| id.as_str()))
+            .map(ToString::to_string)
+            .collect()
     }
 
     fn write_staging_file(&self, relative_path: &str, content: &str) {
@@ -1007,6 +1132,250 @@ fn test_multi_source_version_only_changes_do_not_require_review() {
     assert_eq!(
         repo.read_env_file("production", "platform/api/values.yaml"),
         Some("image:\n  repository: ghcr.io/demo/api\n  tag: 1.2.0\n".to_string())
+    );
+}
+
+#[test]
+fn test_multi_source_consecutive_runs_create_unique_snapshot_ids() {
+    let repo = TestRepo::new();
+    repo.create_multi_source_config();
+
+    repo.write_env_file(
+        "production",
+        "platform/api/values.yaml",
+        "image:\n  repository: ghcr.io/demo/api\n  tag: 1.0.0\n",
+    );
+    repo.write_env_file(
+        "staging-a",
+        "platform/api/values.yaml",
+        "image:\n  repository: ghcr.io/demo/api\n  tag: 1.1.0\n",
+    );
+    repo.write_env_file(
+        "staging-b",
+        "platform/api/values.yaml",
+        "image:\n  repository: ghcr.io/demo/api\n  tag: 1.2.0\n",
+    );
+    repo.commit_all("Add version files for snapshot id test");
+
+    let (success, stdout, stderr) = repo.run_prl(&[
+        "--force",
+        "promote",
+        "--source",
+        "staging-a",
+        "--source",
+        "staging-b",
+        "--dest",
+        "production",
+    ]);
+    assert!(success, "stdout: {}\nstderr: {}", stdout, stderr);
+
+    let (success, stdout, stderr) = repo.run_prl(&[
+        "--force",
+        "promote",
+        "--source",
+        "staging-a",
+        "--source",
+        "staging-b",
+        "--dest",
+        "production",
+    ]);
+    assert!(success, "stdout: {}\nstderr: {}", stdout, stderr);
+
+    let ids = repo.snapshot_ids("production");
+    assert!(
+        ids.len() >= 2,
+        "expected at least two snapshots, got {:?}",
+        ids
+    );
+    let last_two = &ids[ids.len() - 2..];
+    assert_ne!(last_two[0], last_two[1], "snapshot ids should be unique");
+}
+
+#[test]
+fn test_realistic_gitops_workflow_preserves_dest_config_and_uses_source_priority() {
+    let repo = TestRepo::new();
+    repo.create_realistic_gitops_config();
+
+    repo.write_env_file(
+        "nbg1-c01",
+        "platform/api/values.yaml",
+        "image:\n  repository: ghcr.io/demo/api\n  tag: 1.0.0\ningress:\n  host: api.nbg1.example.com\n",
+    );
+    repo.write_env_file(
+        "grigri.cloud",
+        "platform/api/values.yaml",
+        "image:\n  repository: ghcr.io/demo/api\n  tag: 1.1.0\ningress:\n  host: api.grigri.example.com\n",
+    );
+    repo.write_env_file(
+        "homelab",
+        "platform/api/values.yaml",
+        "image:\n  repository: ghcr.io/demo/api\n  tag: 1.2.0\ningress:\n  host: api.home.example.com\n",
+    );
+    repo.commit_all("Add realistic api manifests");
+
+    let (success, stdout, _stderr) = repo.run_prl(&["promote"]);
+
+    assert!(success, "{}", stdout);
+    assert!(
+        !stdout.contains("Review required before promotion."),
+        "{}",
+        stdout
+    );
+    assert!(repo.review_artifact_path().is_none());
+    assert_eq!(
+        repo.read_env_file("nbg1-c01", "platform/api/values.yaml"),
+        Some(
+            "image:\n  repository: ghcr.io/demo/api\n  tag: 1.2.0\ningress:\n  host: api.nbg1.example.com\n"
+                .to_string()
+        )
+    );
+}
+
+#[test]
+fn test_realistic_gitops_workflow_skips_new_components_with_only_existing() {
+    let repo = TestRepo::new();
+    repo.create_realistic_gitops_config();
+
+    repo.write_env_file(
+        "grigri.cloud",
+        "apps/new-service/config.yaml",
+        "name: new-service\n",
+    );
+    repo.commit_all("Add new service only in source");
+
+    let (success, stdout, _stderr) = repo.run_prl(&["promote"]);
+
+    assert!(success, "{}", stdout);
+    assert!(
+        !stdout.contains("Review required before promotion."),
+        "{}",
+        stdout
+    );
+    assert!(stdout.contains("No changes to promote"), "{}", stdout);
+    assert!(repo.review_artifact_path().is_none());
+    assert_eq!(
+        repo.read_env_file("nbg1-c01", "apps/new-service/config.yaml"),
+        None
+    );
+}
+
+#[test]
+fn test_realistic_gitops_workflow_ignores_values_images_denylist() {
+    let repo = TestRepo::new();
+    repo.create_realistic_gitops_config();
+
+    repo.write_env_file(
+        "nbg1-c01",
+        "apps/calypso/values-images.yaml",
+        "image:\n  tag: 1.0.0\n",
+    );
+    repo.write_env_file(
+        "grigri.cloud",
+        "apps/calypso/values-images.yaml",
+        "image:\n  tag: 2.0.0\n",
+    );
+    repo.commit_all("Add denied values-images files");
+
+    let (success, stdout, _stderr) = repo.run_prl(&["promote"]);
+
+    assert!(success, "{}", stdout);
+    assert!(stdout.contains("No changes to promote"), "{}", stdout);
+    assert_eq!(
+        repo.read_env_file("nbg1-c01", "apps/calypso/values-images.yaml"),
+        Some("image:\n  tag: 1.0.0\n".to_string())
+    );
+}
+
+#[test]
+fn test_realistic_gitops_workflow_creates_review_for_existing_conflicting_file() {
+    let repo = TestRepo::new();
+    repo.create_realistic_gitops_config();
+
+    repo.write_env_file("nbg1-c01", "platform/api/config.yaml", "mode: prod\n");
+    repo.write_env_file("grigri.cloud", "platform/api/config.yaml", "mode: cloud\n");
+    repo.write_env_file("homelab", "platform/api/config.yaml", "mode: home\n");
+    repo.commit_all("Add conflicting config manifests");
+
+    let (success, stdout, _stderr) = repo.run_prl(&["promote"]);
+
+    assert!(success, "{}", stdout);
+    assert!(
+        stdout.contains("Review required before promotion."),
+        "{}",
+        stdout
+    );
+    assert!(repo.review_artifact_path().is_some());
+    assert_eq!(
+        repo.read_env_file("nbg1-c01", "platform/api/config.yaml"),
+        Some("mode: prod\n".to_string())
+    );
+}
+
+#[test]
+fn test_realistic_gitops_workflow_does_not_warn_for_source_only_version_components() {
+    let repo = TestRepo::new();
+    repo.create_realistic_gitops_config();
+
+    repo.write_env_file(
+        "nbg1-c01",
+        "platform/api/values.yaml",
+        "image:\n  repository: ghcr.io/demo/api\n  tag: 1.0.0\n",
+    );
+    repo.write_env_file(
+        "grigri.cloud",
+        "platform/api/values.yaml",
+        "image:\n  repository: ghcr.io/demo/api\n  tag: 1.1.0\n",
+    );
+    repo.write_env_file(
+        "homelab",
+        "platform/git/values.yaml",
+        "image:\n  repository: ghcr.io/demo/git\n  tag: 9.9.9\n",
+    );
+    repo.commit_all("Add version files including source-only component");
+
+    let (success, _stdout, stderr) = repo.run_prl(&["promote"]);
+
+    assert!(success, "{}", stderr);
+    assert!(
+        !stderr.contains("Component directory not found"),
+        "unexpected warning: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_realistic_gitops_workflow_no_delete_does_not_record_deleted_files_in_snapshot() {
+    let repo = TestRepo::new();
+    repo.create_realistic_gitops_config();
+
+    repo.write_env_file("nbg1-c01", "apps/landing/config.yaml", "keep: true\n");
+    repo.write_env_file(
+        "nbg1-c01",
+        "platform/api/values.yaml",
+        "image:\n  repository: ghcr.io/demo/api\n  tag: 1.0.0\n",
+    );
+    repo.write_env_file(
+        "grigri.cloud",
+        "platform/api/values.yaml",
+        "image:\n  repository: ghcr.io/demo/api\n  tag: 1.1.0\n",
+    );
+    repo.commit_all("Add files for snapshot no-delete test");
+
+    let (success, stdout, _stderr) = repo.run_prl(&["promote"]);
+
+    assert!(success, "{}", stdout);
+    let snapshot = repo
+        .read_snapshot_file("nbg1-c01")
+        .expect("Snapshot file should exist");
+    assert!(
+        !snapshot.contains("files_deleted:"),
+        "snapshot should omit files_deleted when no_delete is active: {}",
+        snapshot
+    );
+    assert!(
+        !snapshot.contains("apps/landing/config.yaml"),
+        "snapshot should not record deletions when no_delete is active: {}",
+        snapshot
     );
 }
 

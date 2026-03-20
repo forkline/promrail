@@ -11,6 +11,7 @@ use crate::config::{Config, PromotionAction};
 use crate::error::{AppResult, PromrailError};
 use crate::files::{FileDiscovery, FileSelector};
 use crate::git::{FileDiff, GitRepo};
+use crate::review::analyze::is_version_managed_file;
 use crate::review::{
     ReviewArtifact, ReviewArtifactStatus, analyze_multi_source_promotion, apply_review_decisions,
     artifact_from_analysis, artifact_path, artifact_ready_for_apply, load_artifact, save_artifact,
@@ -264,14 +265,18 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
         return Ok(());
     };
 
-    let files_to_delete = calculate_files_to_delete(
-        &discovery,
-        &dest_path,
-        &all_files,
-        &analysis.retained_paths,
-        &config.protected_dirs,
-        args,
-    )?;
+    let files_to_delete = if should_delete {
+        calculate_files_to_delete(
+            &discovery,
+            &dest_path,
+            &all_files,
+            &analysis.retained_paths,
+            &config.protected_dirs,
+            args,
+        )?
+    } else {
+        Vec::new()
+    };
 
     // Show summary
     let total_copies = all_files.len();
@@ -364,7 +369,7 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
         }
     }
 
-    let version_updated = apply_merged_versions(config, &source_paths, &dest_path)?;
+    let version_updated = apply_merged_versions(config, &source_paths, &dest_path, &analysis)?;
 
     save_multi_source_snapshot(
         &dest_path,
@@ -431,16 +436,10 @@ fn create_multi_source_snapshot(
     dest_path: &Path,
     review_artifact: Option<&Path>,
 ) -> AppResult<String> {
-    let timestamp = time::OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_default()
-        .replace([':', '-'], "")
-        .split('.')
-        .next()
-        .unwrap_or("unknown")
-        .to_string();
-
-    let snapshot_id = format!("snap_{}", timestamp);
+    let snapshot_id = format!(
+        "snap_{}",
+        time::OffsetDateTime::now_utc().unix_timestamp_nanos()
+    );
 
     // Create snapshot file path
     let snapshot_file = dest_path.join(".promotion-snapshots.yaml");
@@ -529,15 +528,17 @@ fn save_multi_source_snapshot(
                             .collect(),
                     ),
                 );
-                map.insert(
-                    serde_yaml::Value::String("files_deleted".to_string()),
-                    serde_yaml::Value::Sequence(
-                        deleted
-                            .iter()
-                            .map(|p| serde_yaml::Value::String(p.display().to_string()))
-                            .collect(),
-                    ),
-                );
+                if !deleted.is_empty() {
+                    map.insert(
+                        serde_yaml::Value::String("files_deleted".to_string()),
+                        serde_yaml::Value::Sequence(
+                            deleted
+                                .iter()
+                                .map(|p| serde_yaml::Value::String(p.display().to_string()))
+                                .collect(),
+                        ),
+                    );
+                }
                 if !version_updated.is_empty() {
                     map.insert(
                         serde_yaml::Value::String("version_updated".to_string()),
@@ -578,8 +579,22 @@ fn apply_merged_versions(
     config: &Config,
     source_paths: &[(String, PathBuf)],
     dest_path: &Path,
+    analysis: &crate::review::analyze::PromotionAnalysis,
 ) -> AppResult<Vec<PathBuf>> {
     if source_paths.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let components: Vec<String> = analysis
+        .retained_paths
+        .iter()
+        .filter(|path| is_version_managed_file(path))
+        .map(|path| get_component(path))
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+
+    if components.is_empty() {
         return Ok(Vec::new());
     }
 
@@ -598,7 +613,7 @@ fn apply_merged_versions(
         &merged.report,
         dest_path,
         &versions::ApplyOptions {
-            components: Vec::new(),
+            components,
             dry_run: false,
             check_conflicts: false,
             create_snapshot: false,
