@@ -77,10 +77,6 @@ pub struct Config {
     #[serde(default)]
     pub git: GitConfig,
 
-    /// Audit logging settings.
-    #[serde(default)]
-    pub audit: AuditConfig,
-
     /// Multi-source promotion rules for complex workflows.
     #[serde(default)]
     pub rules: PromotionRules,
@@ -533,24 +529,6 @@ fn default_true() -> bool {
     true
 }
 
-/// Audit logging configuration.
-#[derive(Debug, Deserialize, Clone, Default, ConfigDoc)]
-pub struct AuditConfig {
-    /// Enable promotion logging to file.
-    #[config_doc(default = "true")]
-    #[serde(default = "default_true")]
-    pub enabled: bool,
-
-    /// Path to audit log file.
-    #[config_doc(default = ".promotion-log.yaml")]
-    #[serde(default = "default_log_file")]
-    pub log_file: String,
-}
-
-fn default_log_file() -> String {
-    ".promotion-log.yaml".to_string()
-}
-
 impl Config {
     /// Load configuration from a YAML file.
     pub fn load(path: &std::path::Path) -> crate::error::AppResult<Self> {
@@ -716,11 +694,6 @@ denylist:
 # Git integration settings
 git:
   require_clean_tree: true
-
-# Audit logging settings
-audit:
-  enabled: true
-  log_file: .promotion-log.yaml
 
 # ─────────────────────────────────────────────────────────────────────────────
 # MULTI-REPO MODE (optional, for cross-repo promotion)

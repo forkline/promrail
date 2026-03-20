@@ -83,7 +83,7 @@ impl FileSelector {
 
         matches!(
             path.file_name().and_then(|name| name.to_str()),
-            Some(".promotion-snapshots.yaml" | ".promotion-log.yaml")
+            Some(".promotion-snapshots.yaml")
         )
     }
 
@@ -125,7 +125,6 @@ mod tests {
         };
 
         assert!(!selector.should_promote(Path::new(".promotion-snapshots.yaml"), false));
-        assert!(!selector.should_promote(Path::new(".promotion-log.yaml"), false));
         assert!(!selector.should_promote(Path::new(".promrail/review/test.yaml"), false));
         assert!(selector.should_promote(Path::new("platform/app/config.yaml"), false));
     }

@@ -11,7 +11,7 @@ use crate::commands::{default_filter, print_promotion_summary};
 use crate::config::{Config, PromotionAction};
 use crate::error::{AppResult, PromrailError};
 use crate::files::{FileDiscovery, FileSelector};
-use crate::git::{FileDiff, GitRepo};
+use crate::git::GitRepo;
 use crate::review::analyze::is_version_managed_file;
 use crate::review::analyze::matching_preserve_paths;
 use crate::review::{
@@ -219,16 +219,6 @@ fn execute_single_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) ->
     println!("{}", style("Promotion complete!").bold());
     print_promotion_summary(result.copied.len(), result.deleted.len(), should_delete);
 
-    if config.audit.enabled {
-        write_audit_log(
-            config,
-            repo,
-            std::slice::from_ref(source),
-            &args.dest,
-            &result,
-        )?;
-    }
-
     Ok(())
 }
 
@@ -416,19 +406,6 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
         println!("{}", style("Multi-source promotion complete!").bold());
     }
     print_promotion_summary(total_copies, total_deletes, should_delete);
-
-    if config.audit.enabled {
-        let result = diff::PromotionResult {
-            copied: changed_files
-                .keys()
-                .map(|p| FileDiff::added(p.clone(), String::new()))
-                .collect(),
-            deleted: files_to_delete.clone(),
-            skipped: vec![],
-            protected: vec![],
-        };
-        write_audit_log(config, repo, &args.sources, &args.dest, &result)?;
-    }
 
     Ok(())
 }
@@ -978,116 +955,6 @@ fn set_yaml_value_at_path(value: &mut serde_yaml::Value, path: &str, new_value: 
 
 fn write_serialized_value(value: &serde_json::Value) -> AppResult<Vec<u8>> {
     Ok((serde_json::to_string_pretty(value)? + "\n").into_bytes())
-}
-
-fn write_audit_log(
-    config: &Config,
-    repo: &GitRepo,
-    sources: &[String],
-    dest: &str,
-    result: &diff::PromotionResult,
-) -> AppResult<()> {
-    let log_path = repo.path.join(&config.audit.log_file);
-
-    let mut entries: Vec<serde_yaml::Value> = if log_path.exists() {
-        let content = match std::fs::read_to_string(&log_path) {
-            Ok(c) => c,
-            Err(e) => {
-                warn!("Could not read audit log, starting fresh: {}", e);
-                return write_new_audit_log(&log_path, sources, dest, result);
-            }
-        };
-
-        match serde_yaml::from_str::<serde_yaml::Value>(&content) {
-            Ok(doc) => doc
-                .get("promotions")
-                .and_then(|v| v.as_sequence())
-                .cloned()
-                .unwrap_or_default(),
-            Err(e) => {
-                warn!("Audit log corrupted, backing up and starting fresh: {}", e);
-                let backup_path = log_path.with_extension("yaml.bak");
-                if let Err(backup_err) = std::fs::rename(&log_path, &backup_path) {
-                    warn!("Could not backup corrupted audit log: {}", backup_err);
-                }
-                return write_new_audit_log(&log_path, sources, dest, result);
-            }
-        }
-    } else {
-        vec![]
-    };
-
-    entries.push(create_audit_entry(sources, dest, result));
-
-    let doc = serde_yaml::Value::Mapping({
-        let mut map = serde_yaml::Mapping::new();
-        map.insert(
-            serde_yaml::Value::String("promotions".to_string()),
-            serde_yaml::Value::Sequence(entries),
-        );
-        map
-    });
-
-    std::fs::write(&log_path, serde_yaml::to_string(&doc)?)?;
-
-    Ok(())
-}
-
-fn write_new_audit_log(
-    log_path: &std::path::Path,
-    sources: &[String],
-    dest: &str,
-    result: &diff::PromotionResult,
-) -> AppResult<()> {
-    let doc = serde_yaml::Value::Mapping({
-        let mut map = serde_yaml::Mapping::new();
-        map.insert(
-            serde_yaml::Value::String("promotions".to_string()),
-            serde_yaml::Value::Sequence(vec![create_audit_entry(sources, dest, result)]),
-        );
-        map
-    });
-
-    std::fs::write(log_path, serde_yaml::to_string(&doc)?)?;
-    Ok(())
-}
-
-fn create_audit_entry(
-    sources: &[String],
-    dest: &str,
-    result: &diff::PromotionResult,
-) -> serde_yaml::Value {
-    let mut entry = serde_yaml::Mapping::new();
-    entry.insert(
-        serde_yaml::Value::String("timestamp".to_string()),
-        serde_yaml::Value::String(
-            time::OffsetDateTime::now_utc()
-                .format(&time::format_description::well_known::Rfc3339)
-                .unwrap_or_default(),
-        ),
-    );
-    entry.insert(
-        serde_yaml::Value::String("sources".to_string()),
-        serde_yaml::Value::Sequence(
-            sources
-                .iter()
-                .map(|s| serde_yaml::Value::String(s.clone()))
-                .collect(),
-        ),
-    );
-    entry.insert(
-        serde_yaml::Value::String("destination".to_string()),
-        serde_yaml::Value::String(dest.to_string()),
-    );
-    entry.insert(
-        serde_yaml::Value::String("files_copied".to_string()),
-        serde_yaml::Value::Number(result.copied.len().into()),
-    );
-    entry.insert(
-        serde_yaml::Value::String("files_deleted".to_string()),
-        serde_yaml::Value::Number(result.deleted.len().into()),
-    );
-    serde_yaml::Value::Mapping(entry)
 }
 
 /// Resolve source names to their filesystem paths.
