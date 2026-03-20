@@ -34,6 +34,9 @@ pub enum PromrailError {
     #[error("Duplicate files found in multiple sources:\n  {}", .0.join("\n  "))]
     DuplicateFiles(Vec<String>),
 
+    #[error("Review artifact is invalid: {0}")]
+    ReviewArtifactInvalid(String),
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 

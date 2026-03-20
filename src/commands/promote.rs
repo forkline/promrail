@@ -11,6 +11,11 @@ use crate::config::{Config, PromotionAction};
 use crate::error::{AppResult, PromrailError};
 use crate::files::{FileDiscovery, FileSelector};
 use crate::git::{FileDiff, GitRepo};
+use crate::review::{
+    ReviewArtifact, ReviewArtifactStatus, analyze_multi_source_promotion, apply_review_decisions,
+    artifact_from_analysis, artifact_path, artifact_ready_for_apply, load_artifact, save_artifact,
+};
+use crate::versions;
 
 /// Collected files from sources: relative path -> (source_name, absolute_path)
 type CollectedFiles = HashMap<PathBuf, (String, PathBuf)>;
@@ -235,16 +240,35 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
     let source_paths = resolve_source_paths(config, repo, &args.sources)?;
     let selector = FileSelector::from_config(config)?;
     let discovery = FileDiscovery::new(selector);
+    let analysis = analyze_multi_source_promotion(config, &source_paths, &dest_path, args)?;
+    let review_path = artifact_path(&repo.path, &analysis.route_key);
+    let mut applied_review_artifact: Option<ReviewArtifact> = None;
 
-    let (all_files, duplicates) =
-        collect_files_from_sources(&discovery, &source_paths, &dest_path, config, args)?;
-
-    handle_duplicates(&duplicates, args, &config.rules.global.promote_options)?;
+    let all_files: CollectedFiles = if analysis.review_items.is_empty() {
+        analysis.auto_files.clone()
+    } else if let Some(existing_artifact) = load_artifact(&repo.path, &analysis.route_key)? {
+        if artifact_ready_for_apply(&existing_artifact, &analysis)? {
+            applied_review_artifact = Some(existing_artifact.clone());
+            apply_review_decisions(&existing_artifact, &analysis)?
+        } else {
+            let artifact =
+                artifact_from_analysis(&analysis, &args.sources, &args.dest, &args.filter);
+            save_artifact(&repo.path, &artifact)?;
+            print_review_required(&review_path, &artifact);
+            return Ok(());
+        }
+    } else {
+        let artifact = artifact_from_analysis(&analysis, &args.sources, &args.dest, &args.filter);
+        save_artifact(&repo.path, &artifact)?;
+        print_review_required(&review_path, &artifact);
+        return Ok(());
+    };
 
     let files_to_delete = calculate_files_to_delete(
         &discovery,
         &dest_path,
         &all_files,
+        &analysis.retained_paths,
         &config.protected_dirs,
         args,
     )?;
@@ -252,6 +276,7 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
     // Show summary
     let total_copies = all_files.len();
     let total_deletes = files_to_delete.len();
+    let total_retained = analysis.retained_paths.len();
 
     if args.sources.len() == 1 {
         println!("Comparing {} -> {}", args.sources[0], args.dest);
@@ -260,7 +285,7 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
     }
     println!();
 
-    if total_copies == 0 && total_deletes == 0 {
+    if total_copies == 0 && total_deletes == 0 && total_retained == 0 {
         println!("No changes to promote");
         return Ok(());
     }
@@ -272,6 +297,12 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
     println!();
     println!("Summary:");
     println!("  {} files to copy", style(total_copies).green());
+    if total_retained > 0 {
+        println!(
+            "  {} files preserved for structured version merge",
+            style(total_retained).cyan()
+        );
+    }
     if should_delete && total_deletes > 0 {
         println!("  {} files to delete", style(total_deletes).red());
     }
@@ -293,7 +324,10 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
         return Ok(());
     }
 
-    let snapshot_id = create_multi_source_snapshot(&dest_path)?;
+    let snapshot_id = create_multi_source_snapshot(
+        &dest_path,
+        Some(review_path.as_path()).filter(|_| applied_review_artifact.is_some()),
+    )?;
     info!("Created snapshot: {}", snapshot_id);
 
     for (relative, (source_name, source_file)) in &all_files {
@@ -330,7 +364,23 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
         }
     }
 
-    save_multi_source_snapshot(&dest_path, &snapshot_id, &all_files, &files_to_delete)?;
+    let version_updated = apply_merged_versions(config, &source_paths, &dest_path)?;
+
+    save_multi_source_snapshot(
+        &dest_path,
+        &snapshot_id,
+        &all_files,
+        &files_to_delete,
+        &version_updated,
+    )?;
+
+    if let Some(mut artifact) = applied_review_artifact {
+        artifact.status = ReviewArtifactStatus::Applied;
+        artifact.updated_at = time::OffsetDateTime::now_utc()
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap_or_default();
+        save_artifact(&repo.path, &artifact)?;
+    }
 
     println!();
     if args.sources.len() == 1 {
@@ -356,7 +406,7 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
     Ok(())
 }
 
-fn get_component(path: &Path) -> String {
+pub(crate) fn get_component(path: &Path) -> String {
     let parts: Vec<_> = path.components().take(2).collect();
     parts
         .iter()
@@ -365,7 +415,7 @@ fn get_component(path: &Path) -> String {
         .join("/")
 }
 
-fn is_protected(path: &Path, protected_dirs: &[String]) -> bool {
+pub(crate) fn is_protected(path: &Path, protected_dirs: &[String]) -> bool {
     path.components().any(|component| {
         protected_dirs
             .iter()
@@ -373,11 +423,14 @@ fn is_protected(path: &Path, protected_dirs: &[String]) -> bool {
     })
 }
 
-fn component_exists_in_dest(dest: &Path, component: &str) -> bool {
+pub(crate) fn component_exists_in_dest(dest: &Path, component: &str) -> bool {
     dest.join(component).exists()
 }
 
-fn create_multi_source_snapshot(dest_path: &Path) -> AppResult<String> {
+fn create_multi_source_snapshot(
+    dest_path: &Path,
+    review_artifact: Option<&Path>,
+) -> AppResult<String> {
     let timestamp = time::OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_default()
@@ -424,6 +477,12 @@ fn create_multi_source_snapshot(dest_path: &Path) -> AppResult<String> {
             serde_yaml::Value::String("status".to_string()),
             serde_yaml::Value::String("applied".to_string()),
         );
+        if let Some(review_artifact) = review_artifact {
+            map.insert(
+                serde_yaml::Value::String("review_artifact".to_string()),
+                serde_yaml::Value::String(review_artifact.display().to_string()),
+            );
+        }
         map
     }));
 
@@ -447,6 +506,7 @@ fn save_multi_source_snapshot(
     snapshot_id: &str,
     files: &HashMap<PathBuf, (String, PathBuf)>,
     deleted: &[PathBuf],
+    version_updated: &[PathBuf],
 ) -> AppResult<()> {
     let snapshot_file = dest_path.join(".promotion-snapshots.yaml");
 
@@ -478,6 +538,17 @@ fn save_multi_source_snapshot(
                             .collect(),
                     ),
                 );
+                if !version_updated.is_empty() {
+                    map.insert(
+                        serde_yaml::Value::String("version_updated".to_string()),
+                        serde_yaml::Value::Sequence(
+                            version_updated
+                                .iter()
+                                .map(|p| serde_yaml::Value::String(p.display().to_string()))
+                                .collect(),
+                        ),
+                    );
+                }
                 break;
             }
         }
@@ -486,6 +557,55 @@ fn save_multi_source_snapshot(
     std::fs::write(&snapshot_file, serde_yaml::to_string(&doc)?)?;
 
     Ok(())
+}
+
+fn print_review_required(review_path: &Path, artifact: &ReviewArtifact) {
+    println!("Review required before promotion.");
+    println!("Artifact: {}", style(review_path.display()).cyan());
+    println!(
+        "  {} new components, {} conflicting file groups",
+        style(artifact.summary.new_components).yellow(),
+        style(artifact.summary.conflicting_files).yellow()
+    );
+    println!();
+    println!(
+        "Use opencode to classify the artifact, set `status: classified`, add `decision` for each item, and set `selected_source` on promoted items."
+    );
+    println!("Run `prl` again after saving the artifact.");
+}
+
+fn apply_merged_versions(
+    config: &Config,
+    source_paths: &[(String, PathBuf)],
+    dest_path: &Path,
+) -> AppResult<Vec<PathBuf>> {
+    if source_paths.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut sources = Vec::new();
+    for (source_name, source_path) in source_paths {
+        let report = versions::extract_versions(source_path, &[])?;
+        sources.push((source_name.clone(), report));
+    }
+
+    let merged = versions::merge_versions(&sources, &config.rules)?;
+    if merged.report.components.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let result = versions::apply_versions(
+        &merged.report,
+        dest_path,
+        &versions::ApplyOptions {
+            components: Vec::new(),
+            dry_run: false,
+            check_conflicts: false,
+            create_snapshot: false,
+        },
+    )?;
+
+    Ok(result.updated_files)
 }
 
 fn write_audit_log(
@@ -723,6 +843,7 @@ fn calculate_files_to_delete(
     discovery: &FileDiscovery,
     dest_path: &Path,
     all_files: &CollectedFiles,
+    retained_paths: &HashSet<PathBuf>,
     protected_dirs: &[String],
     args: &PromoteArgs,
 ) -> AppResult<Vec<PathBuf>> {
@@ -737,7 +858,11 @@ fn calculate_files_to_delete(
     let files_to_delete: Vec<PathBuf> = dest_discovered
         .files
         .iter()
-        .filter(|file| !is_protected(file, protected_dirs) && !all_relative.contains(*file))
+        .filter(|file| {
+            !is_protected(file, protected_dirs)
+                && !all_relative.contains(*file)
+                && !retained_paths.contains(*file)
+        })
         .cloned()
         .collect();
 

@@ -11,6 +11,7 @@ mod error;
 mod files;
 mod git;
 mod logger;
+mod review;
 mod versions;
 
 use cli::{Cli, Commands, ConfigCommands, LogLevel, SnapshotCommands, VersionsCommands};
