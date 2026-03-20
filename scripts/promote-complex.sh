@@ -75,9 +75,10 @@ done
 echo -e "${CYAN}=== Multi-Source Promotion ===${NC}"
 echo ""
 
-# Check promrail is available
-if ! command -v promrail &> /dev/null; then
-    echo -e "${RED}ERROR: promrail not found in PATH${NC}"
+# Check prl is available
+PRL_BIN="prl"
+if ! command -v "$PRL_BIN" &> /dev/null; then
+    echo -e "${RED}ERROR: prl not found in PATH${NC}"
     echo "Install with: cargo install --path ."
     exit 1
 fi
@@ -113,6 +114,9 @@ fi
 
 echo -e "Destination: ${CYAN}$DEST_PATH${NC}"
 echo ""
+
+# Expand destination path for apply step
+DEST_EXPANDED="${DEST_PATH/#\~/$HOME}"
 
 # Get sources from rules or file
 SOURCES=()
@@ -165,7 +169,7 @@ for src in "${SOURCES[@]}"; do
     temp_file=$(mktemp)
     echo -e "  Extracting from ${CYAN}$src${NC}..."
 
-    promrail versions extract --path "$expanded_path" -o "$temp_file" 2>/dev/null
+    "$PRL_BIN" versions extract --path "$expanded_path" -o "$temp_file" 2>/dev/null
 
     SOURCE_ARGS+=("--source" "$expanded_path")
     TEMP_FILES+=("$temp_file")
@@ -180,12 +184,12 @@ MERGE_OUTPUT=$(mktemp)
 MERGE_EXPLAIN=$(mktemp)
 
 if [ -n "$EXPLAIN" ]; then
-    promrail versions merge "${SOURCE_ARGS[@]}" --explain > "$MERGE_EXPLAIN" 2>&1
+    "$PRL_BIN" versions merge "${SOURCE_ARGS[@]}" --explain > "$MERGE_EXPLAIN" 2>&1
     cat "$MERGE_EXPLAIN"
     echo ""
 fi
 
-promrail versions merge "${SOURCE_ARGS[@]}" -o "$MERGE_OUTPUT" 2>/dev/null
+"$PRL_BIN" versions merge "${SOURCE_ARGS[@]}" -o "$MERGE_OUTPUT" 2>/dev/null
 
 echo -e "  Merged versions written to temp file"
 echo ""
@@ -195,9 +199,9 @@ echo -e "${GREEN}Step 3: Applying changes...${NC}"
 
 if [ -n "$DRY_RUN" ]; then
     echo -e "  ${YELLOW}Dry run mode - not applying changes${NC}"
-    promrail versions apply -f "$MERGE_OUTPUT" --path "$DEST_EXPANDED" --dry-run
+    "$PRL_BIN" versions apply -f "$MERGE_OUTPUT" --path "$DEST_EXPANDED" --dry-run
 else
-    promrail versions apply \
+    "$PRL_BIN" versions apply \
         -f "$MERGE_OUTPUT" \
         --path "$DEST_EXPANDED" \
         --check-conflicts \
@@ -219,8 +223,8 @@ else
     echo -e "    ${CYAN}git diff${NC}"
     echo ""
     echo -e "  Rollback if needed:"
-    echo -e "    ${CYAN}promrail snapshot list --path $DEST_PATH${NC}"
-    echo -e "    ${CYAN}promrail snapshot rollback <id> --path $DEST_PATH${NC}"
+    echo -e "    ${CYAN}$PRL_BIN snapshot list --path $DEST_PATH${NC}"
+    echo -e "    ${CYAN}$PRL_BIN snapshot rollback <id> --path $DEST_PATH${NC}"
 fi
 
 # Cleanup temp files
