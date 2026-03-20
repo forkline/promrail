@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use console::style;
 use log::{debug, info, warn};
@@ -656,11 +657,21 @@ fn preserve_destination_paths(
     dest_file: &Path,
     paths: &[String],
 ) -> AppResult<()> {
+    let extension = source_file
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or_default();
+
+    if extension.eq_ignore_ascii_case("yaml") || extension.eq_ignore_ascii_case("yml") {
+        preserve_yaml_with_python(source_file, dest_file, paths)?;
+        return Ok(());
+    }
+
     let source_content = std::fs::read_to_string(source_file)?;
     let dest_content = std::fs::read_to_string(dest_file)?;
 
-    let mut source_doc: serde_yaml::Value = serde_yaml::from_str(&source_content)?;
-    let dest_doc: serde_yaml::Value = serde_yaml::from_str(&dest_content)?;
+    let mut source_doc: serde_json::Value = serde_json::from_str(&source_content)?;
+    let dest_doc: serde_json::Value = serde_json::from_str(&dest_content)?;
 
     for path in paths {
         if let Some(value) = get_value_at_path(&dest_doc, path) {
@@ -669,6 +680,97 @@ fn preserve_destination_paths(
     }
 
     write_serialized_value(dest_file, &source_doc)?;
+    Ok(())
+}
+
+fn preserve_yaml_with_python(
+    source_file: &Path,
+    dest_file: &Path,
+    paths: &[String],
+) -> AppResult<()> {
+    let paths_json = serde_json::to_string(paths)?;
+    let script = r#"
+from pathlib import Path
+import json
+import sys
+from ruamel.yaml import YAML
+
+
+def parse_path(path):
+    tokens = []
+    for segment in path.split('.'):
+        if not segment:
+            continue
+        try:
+            tokens.append(int(segment))
+        except ValueError:
+            tokens.append(segment)
+    return tokens
+
+
+def get_value(value, tokens):
+    current = value
+    for token in tokens:
+        current = current[token]
+    return current
+
+
+def set_value(value, tokens, new_value):
+    current = value
+    for token in tokens[:-1]:
+        current = current[token]
+    current[tokens[-1]] = new_value
+
+
+source_path = Path(sys.argv[1])
+dest_path = Path(sys.argv[2])
+paths = json.loads(sys.argv[3])
+
+yaml = YAML()
+yaml.preserve_quotes = True
+yaml.indent(mapping=2, sequence=4, offset=2)
+yaml.width = 4096
+
+source_text = source_path.read_text(encoding='utf-8')
+dest_text = dest_path.read_text(encoding='utf-8')
+yaml.explicit_start = dest_text.lstrip().startswith('---')
+
+source_doc = yaml.load(source_text)
+dest_doc = yaml.load(dest_text)
+
+for path in paths:
+    tokens = parse_path(path)
+    try:
+        value = get_value(dest_doc, tokens)
+    except Exception:
+        continue
+    set_value(source_doc, tokens, value)
+
+with dest_path.open('w', encoding='utf-8') as fh:
+    yaml.dump(source_doc, fh)
+"#;
+
+    let output = Command::new("python")
+        .arg("-c")
+        .arg(script)
+        .arg(source_file)
+        .arg(dest_file)
+        .arg(paths_json)
+        .output()
+        .map_err(|err| {
+            PromrailError::ReviewArtifactInvalid(format!(
+                "failed to run python yaml preserve helper: {}",
+                err
+            ))
+        })?;
+
+    if !output.status.success() {
+        return Err(PromrailError::ReviewArtifactInvalid(format!(
+            "python yaml preserve helper failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
+    }
+
     Ok(())
 }
 
@@ -689,28 +791,28 @@ fn parse_path(path: &str) -> Vec<PathToken> {
 }
 
 fn get_value_at_path<'a>(
-    value: &'a serde_yaml::Value,
+    value: &'a serde_json::Value,
     path: &str,
-) -> Option<&'a serde_yaml::Value> {
+) -> Option<&'a serde_json::Value> {
     let mut current = value;
     for token in parse_path(path) {
         match token {
             PathToken::Key(key) => {
-                current = current.as_mapping()?.get(serde_yaml::Value::String(key))?;
+                current = current.get(key)?;
             }
             PathToken::Index(index) => {
-                current = current.as_sequence()?.get(index)?;
+                current = current.as_array()?.get(index)?;
             }
         }
     }
     Some(current)
 }
 
-fn set_value_at_path(value: &mut serde_yaml::Value, path: &str, new_value: serde_yaml::Value) {
+fn set_value_at_path(value: &mut serde_json::Value, path: &str, new_value: serde_json::Value) {
     fn set_recursive(
-        current: &mut serde_yaml::Value,
+        current: &mut serde_json::Value,
         tokens: &[PathToken],
-        new_value: serde_yaml::Value,
+        new_value: serde_json::Value,
     ) {
         if tokens.is_empty() {
             *current = new_value;
@@ -719,22 +821,20 @@ fn set_value_at_path(value: &mut serde_yaml::Value, path: &str, new_value: serde
 
         match &tokens[0] {
             PathToken::Key(key) => {
-                if !current.is_mapping() {
-                    *current = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+                if !current.is_object() {
+                    *current = serde_json::Value::Object(serde_json::Map::new());
                 }
-                let map = current.as_mapping_mut().expect("mapping just created");
-                let entry = map
-                    .entry(serde_yaml::Value::String(key.clone()))
-                    .or_insert(serde_yaml::Value::Null);
+                let map = current.as_object_mut().expect("object just created");
+                let entry = map.entry(key.clone()).or_insert(serde_json::Value::Null);
                 set_recursive(entry, &tokens[1..], new_value);
             }
             PathToken::Index(index) => {
-                if !current.is_sequence() {
-                    *current = serde_yaml::Value::Sequence(Vec::new());
+                if !current.is_array() {
+                    *current = serde_json::Value::Array(Vec::new());
                 }
-                let seq = current.as_sequence_mut().expect("sequence just created");
+                let seq = current.as_array_mut().expect("array just created");
                 while seq.len() <= *index {
-                    seq.push(serde_yaml::Value::Null);
+                    seq.push(serde_json::Value::Null);
                 }
                 set_recursive(&mut seq[*index], &tokens[1..], new_value);
             }
@@ -745,17 +845,8 @@ fn set_value_at_path(value: &mut serde_yaml::Value, path: &str, new_value: serde
     set_recursive(value, &tokens, new_value);
 }
 
-fn write_serialized_value(path: &Path, value: &serde_yaml::Value) -> AppResult<()> {
-    let extension = path
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .unwrap_or_default();
-    let content = if extension.eq_ignore_ascii_case("json") {
-        let json_value = serde_json::to_value(value)?;
-        serde_json::to_string_pretty(&json_value)? + "\n"
-    } else {
-        serde_yaml::to_string(value)?
-    };
+fn write_serialized_value(path: &Path, value: &serde_json::Value) -> AppResult<()> {
+    let content = serde_json::to_string_pretty(value)? + "\n";
 
     std::fs::write(path, content)?;
     Ok(())

@@ -1254,6 +1254,7 @@ fn test_multi_source_preserve_rule_keeps_destination_env_values() {
         "https://prod.example.com/callback"
     );
     assert_eq!(doc["spec"]["common"], "new");
+    assert!(content.contains("  redirectUrl:\n    - https://prod.example.com/callback\n"));
 }
 
 #[test]
