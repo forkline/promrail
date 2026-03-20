@@ -133,9 +133,6 @@ prl versions extract --path ~/gitops/staging -o versions.json
 # Apply versions to another environment
 prl versions apply -f versions.json --path ~/gitops/production
 
-# Compare versions between environments
-prl versions diff --source ~/gitops/staging --dest ~/gitops/production
-
 # Apply with conflict detection and snapshot
 prl versions apply -f versions.json --path ~/gitops/production \
   --check-conflicts --snapshot
@@ -155,8 +152,6 @@ prl snapshot show <id> --path ~/gitops/production
 # Rollback to a snapshot
 prl snapshot rollback <id> --path ~/gitops/production
 
-# Delete a snapshot
-prl snapshot delete <id> --path ~/gitops/production
 ```
 
 ### Multi-Source Merge

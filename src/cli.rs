@@ -177,18 +177,6 @@ pub enum VersionsCommands {
         dry_run: bool,
     },
 
-    #[command(about = "Compare versions between two repositories")]
-    Diff {
-        #[arg(short = 's', long)]
-        source: String,
-
-        #[arg(short = 'd', long)]
-        dest: String,
-
-        #[arg(name = "filter")]
-        filter_vec: Vec<String>,
-    },
-
     #[command(about = "Merge versions from multiple sources")]
     Merge {
         #[arg(
@@ -233,14 +221,6 @@ pub enum SnapshotCommands {
         #[arg(short = 'p', long)]
         path: String,
     },
-
-    #[command(about = "Delete a snapshot")]
-    Delete {
-        id: String,
-
-        #[arg(short = 'p', long)]
-        path: String,
-    },
 }
 
 #[derive(Debug, Clone, Subcommand)]
@@ -252,15 +232,5 @@ pub enum ConfigCommands {
     Example {
         #[arg(short, long, help = "Output file path (default: stdout)")]
         output: Option<String>,
-    },
-
-    #[command(about = "Compare configuration files between directories")]
-    Diff {
-        source: String,
-
-        dest: String,
-
-        #[arg(short, long, help = "Filter to specific files (comma-separated)")]
-        file: Option<String>,
     },
 }

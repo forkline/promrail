@@ -175,19 +175,3 @@ fn apply_image_tag_change(value: &mut serde_yaml::Value, image_name: &str, new_t
         }
     }
 }
-
-/// Delete a snapshot by ID.
-pub fn delete(dest: &Path, id: &str) -> AppResult<bool> {
-    let mut file = load(dest)?;
-    let initial_len = file.snapshots.len();
-    file.snapshots.retain(|s| s.id != id);
-
-    if file.snapshots.len() < initial_len {
-        save(dest, &file)?;
-        info!("Deleted snapshot {}", id);
-        Ok(true)
-    } else {
-        warn!("Snapshot {} not found", id);
-        Ok(false)
-    }
-}

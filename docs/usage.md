@@ -486,19 +486,6 @@ prl versions apply -f versions.json --path ~/gitops/production --check-conflicts
 prl versions apply -f versions.json --path ~/gitops/production --snapshot
 ```
 
-### `prl versions diff`
-
-Compare versions between two repositories:
-
-```bash
-prl versions diff --source ~/gitops/staging --dest ~/gitops/production
-```
-
-Output shows version differences:
-- Green: Version in destination
-- Red: Version in source
-- Yellow: Component name
-
 ## Snapshots
 
 Snapshots record the state of a repository before applying changes, enabling rollback.
@@ -549,14 +536,6 @@ Rollback to a snapshot:
 prl snapshot rollback snap_20260317_abc123 --path ~/gitops/production
 ```
 
-### `prl snapshot delete`
-
-Delete a snapshot:
-
-```bash
-prl snapshot delete snap_20260317_abc123 --path ~/gitops/production
-```
-
 ## Config Reference
 
 View configuration documentation directly in the CLI:
@@ -588,17 +567,6 @@ prl config example
 prl config example -o promrail.yaml
 ```
 
-### `prl config diff`
-
-Compare configuration files between directories:
-
-```bash
-prl config diff ~/gitops/staging ~/gitops/production
-
-# Filter to specific files
-prl config diff ~/gitops/staging ~/gitops/production -f kustomization.yaml,values.yaml
-```
-
 ## Workflows
 
 ### Version Promotion Workflow
@@ -610,14 +578,11 @@ prl versions extract --path ~/gitops/staging -o staging-versions.json
 # 2. Review the versions
 cat staging-versions.json | jq
 
-# 3. Compare with production
-prl versions diff --source ~/gitops/staging --dest ~/gitops/production
-
-# 4. Apply with conflict detection and snapshot
+# 3. Apply with conflict detection and snapshot
 prl versions apply -f staging-versions.json --path ~/gitops/production \
   --check-conflicts --snapshot
 
-# 5. If something goes wrong, rollback
+# 4. If something goes wrong, rollback
 prl snapshot list --path ~/gitops/production
 prl snapshot rollback <snapshot-id> --path ~/gitops/production
 ```
