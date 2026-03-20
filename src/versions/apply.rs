@@ -1,6 +1,7 @@
 //! Version application to repository files.
 
 use std::path::Path;
+use std::process::Command;
 
 use log::{info, warn};
 
@@ -194,8 +195,7 @@ fn update_kustomization_versions(
         }
 
         if !dry_run {
-            let new_content = serde_yaml::to_string(&doc)?;
-            std::fs::write(path, new_content)?;
+            write_kustomization_yaml(path, charts, &doc)?;
         }
     }
 
@@ -252,8 +252,7 @@ fn update_chart_versions(
         }
 
         if !dry_run {
-            let new_content = serde_yaml::to_string(&doc)?;
-            std::fs::write(path, new_content)?;
+            write_chart_yaml(path, charts, &doc)?;
         }
     }
 
@@ -284,12 +283,160 @@ fn update_values_images(
         }
 
         if !dry_run {
-            let new_content = serde_yaml::to_string(&doc)?;
-            std::fs::write(path, new_content)?;
+            write_values_yaml(path, images, &doc)?;
         }
     }
 
     Ok(changed)
+}
+
+fn write_kustomization_yaml(
+    path: &Path,
+    charts: &[crate::versions::models::HelmChartVersion],
+    fallback_doc: &serde_yaml::Value,
+) -> AppResult<()> {
+    let updates: Vec<_> = charts
+        .iter()
+        .map(|chart| serde_json::json!({"name": chart.name, "version": chart.version}))
+        .collect();
+    write_yaml_roundtrip(path, "kustomization", updates, fallback_doc)
+}
+
+fn write_chart_yaml(
+    path: &Path,
+    charts: &[crate::versions::models::HelmChartVersion],
+    fallback_doc: &serde_yaml::Value,
+) -> AppResult<()> {
+    let updates: Vec<_> = charts
+        .iter()
+        .map(|chart| serde_json::json!({"name": chart.name, "version": chart.version}))
+        .collect();
+    write_yaml_roundtrip(path, "chart", updates, fallback_doc)
+}
+
+fn write_values_yaml(
+    path: &Path,
+    images: &[crate::versions::models::ContainerImageVersion],
+    fallback_doc: &serde_yaml::Value,
+) -> AppResult<()> {
+    let updates: Vec<_> = images
+        .iter()
+        .map(|image| serde_json::json!({"name": image.name, "tag": image.tag}))
+        .collect();
+    write_yaml_roundtrip(path, "values", updates, fallback_doc)
+}
+
+fn write_yaml_roundtrip(
+    path: &Path,
+    mode: &str,
+    updates: Vec<serde_json::Value>,
+    fallback_doc: &serde_yaml::Value,
+) -> AppResult<()> {
+    match roundtrip_update_yaml(path, mode, updates) {
+        Ok(content) => {
+            std::fs::write(path, content)?;
+            Ok(())
+        }
+        Err(crate::error::PromrailError::ReviewArtifactInvalid(message))
+            if message.contains("No module named 'ruamel'")
+                || message.contains("No module named \"ruamel\"") =>
+        {
+            std::fs::write(path, serde_yaml::to_string(fallback_doc)?)?;
+            Ok(())
+        }
+        Err(err) => Err(err),
+    }
+}
+
+fn roundtrip_update_yaml(
+    path: &Path,
+    mode: &str,
+    updates: Vec<serde_json::Value>,
+) -> AppResult<Vec<u8>> {
+    let updates_json = serde_json::to_string(&updates)?;
+    let script = r#"
+import json
+import sys
+from pathlib import Path
+from ruamel.yaml import YAML
+
+
+def update_kustomization(doc, updates):
+    mapping = {item['name']: item['version'] for item in updates}
+    for chart in doc.get('helmCharts', []) or []:
+        name = chart.get('name')
+        if name in mapping:
+            chart['version'] = mapping[name]
+
+
+def update_chart(doc, updates):
+    mapping = {item['name']: item['version'] for item in updates}
+    for dep in doc.get('dependencies', []) or []:
+        name = dep.get('name')
+        if name in mapping:
+            dep['version'] = mapping[name]
+
+
+def update_values(node, mapping):
+    if isinstance(node, dict):
+        repo = node.get('repository')
+        tag = node.get('tag')
+        if repo in mapping and tag != mapping[repo]:
+            node['tag'] = mapping[repo]
+        for value in node.values():
+            update_values(value, mapping)
+    elif isinstance(node, list):
+        for item in node:
+            update_values(item, mapping)
+
+
+path = Path(sys.argv[1])
+mode = sys.argv[2]
+updates = json.loads(sys.argv[3])
+
+yaml = YAML()
+yaml.preserve_quotes = True
+yaml.indent(mapping=2, sequence=4, offset=2)
+yaml.width = 4096
+
+text = path.read_text(encoding='utf-8')
+yaml.explicit_start = text.lstrip().startswith('---')
+doc = yaml.load(text)
+
+if mode == 'kustomization':
+    update_kustomization(doc, updates)
+elif mode == 'chart':
+    update_chart(doc, updates)
+elif mode == 'values':
+    update_values(doc, {item['name']: item['tag'] for item in updates})
+else:
+    raise SystemExit(f'unknown mode: {mode}')
+
+yaml.dump(doc, sys.stdout)
+"#;
+
+    let output = Command::new("python")
+        .arg("-c")
+        .arg(script)
+        .arg(path)
+        .arg(mode)
+        .arg(updates_json)
+        .output()
+        .map_err(|err| {
+            crate::error::PromrailError::ReviewArtifactInvalid(format!(
+                "failed to run python yaml roundtrip helper: {}",
+                err
+            ))
+        })?;
+
+    if !output.status.success() {
+        return Err(crate::error::PromrailError::ReviewArtifactInvalid(format!(
+            "python yaml roundtrip helper failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
+    }
+
+    Ok(output.stdout)
 }
 
 /// Recursively update image tags in YAML structure.
@@ -398,5 +545,72 @@ fn compare_components(
         component: component.to_string(),
         helm_charts: helm_chart_diffs,
         container_images: container_image_diffs,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::process::Command;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_update_kustomization_versions_preserves_formatting_when_ruamel_available() {
+        let has_ruamel = Command::new("python")
+            .args(["-c", "import ruamel.yaml"])
+            .output()
+            .map(|output| output.status.success())
+            .unwrap_or(false);
+
+        let temp = TempDir::new().expect("tempdir");
+        let path = temp.path().join("kustomization.yaml");
+        let content = r#"apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: external-secrets
+
+resources:
+  - resources/clustersecretstore.yaml
+
+helmCharts:
+  - includeCRDs: true
+    name: external-secrets
+    namespace: external-secrets
+    releaseName: external-secrets
+    repo: https://charts.external-secrets.io
+    valuesFile: values.yaml
+    version: 2.1.0
+
+patches:
+  - patch: |-
+      - op: add
+        path: "/metadata/annotations/argocd.argoproj.io~1sync-options"
+        value: "Replace=true"
+    target:
+      group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+"#;
+        fs::write(&path, content).expect("write kustomization");
+
+        let charts = vec![crate::versions::models::HelmChartVersion {
+            name: "external-secrets".to_string(),
+            version: "2.4.0".to_string(),
+            repository: Some("https://charts.external-secrets.io".to_string()),
+            source_file: "kustomization.yaml".to_string(),
+        }];
+
+        let changed =
+            update_kustomization_versions(&path, &charts, false, "platform/external-secrets", None)
+                .expect("update should succeed");
+        assert!(changed);
+
+        let updated = fs::read_to_string(&path).expect("read updated kustomization");
+        assert!(updated.contains("version: 2.4.0"));
+        if has_ruamel {
+            assert!(updated.contains(
+                "resources:\n  - resources/clustersecretstore.yaml\n\nhelmCharts:\n  - includeCRDs: true"
+            ));
+            assert!(updated.contains("patches:\n  - patch: |-\n      - op: add"));
+        }
     }
 }
