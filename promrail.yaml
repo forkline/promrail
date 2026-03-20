@@ -38,8 +38,3 @@ denylist:
 # Git integration
 git:
   require_clean_tree: true
-
-# Audit logging
-audit:
-  enabled: true
-  log_file: .promotion-log.yaml
