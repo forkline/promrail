@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.1.1](https://github.com/forkline/prl/tree/v0.1.1) - 2026-03-20
+
+### Fixed
+
+- Keep promrail name for AUR packages, binary is prl ([d385298](https://github.com/forkline/prl/commit/d3852982dfa13de9759b169b882d0ad2f7a73974))
+- Correct release URLs to forkline/promrail, remove aarch64-linux from -bin ([e7ed648](https://github.com/forkline/prl/commit/e7ed64800d97c0ed0cf8cc0500d55948324f13e4))
+
 ## [v0.1.0](https://github.com/forkline/prl/tree/v0.1.0) - 2026-03-19
 
 ### Added
