@@ -12,6 +12,7 @@ use crate::error::{AppResult, PromrailError};
 use crate::files::{FileDiscovery, FileSelector};
 use crate::git::{FileDiff, GitRepo};
 use crate::review::analyze::is_version_managed_file;
+use crate::review::analyze::matching_preserve_paths;
 use crate::review::{
     ReviewArtifact, ReviewArtifactStatus, analyze_multi_source_promotion, apply_review_decisions,
     artifact_from_analysis, artifact_path, artifact_ready_for_apply, load_artifact, save_artifact,
@@ -346,7 +347,9 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
             std::fs::create_dir_all(parent)?;
         }
 
-        std::fs::copy(source_file, &dest_file)?;
+        if !apply_preserve_rules(config, relative, source_file, &dest_file)? {
+            std::fs::copy(source_file, &dest_file)?;
+        }
         println!(
             "{}",
             style(format!(
@@ -621,6 +624,141 @@ fn apply_merged_versions(
     )?;
 
     Ok(result.updated_files)
+}
+
+fn apply_preserve_rules(
+    config: &Config,
+    relative: &Path,
+    source_file: &Path,
+    dest_file: &Path,
+) -> AppResult<bool> {
+    if !dest_file.exists() {
+        return Ok(false);
+    }
+
+    let component = get_component(relative);
+    let Some(component_rule) = config.rules.get_component_rule(&component) else {
+        return Ok(false);
+    };
+    let Some(paths) = matching_preserve_paths(component_rule, &component, relative) else {
+        return Ok(false);
+    };
+    if paths.is_empty() {
+        return Ok(false);
+    }
+
+    preserve_destination_paths(source_file, dest_file, &paths)?;
+    Ok(true)
+}
+
+fn preserve_destination_paths(
+    source_file: &Path,
+    dest_file: &Path,
+    paths: &[String],
+) -> AppResult<()> {
+    let source_content = std::fs::read_to_string(source_file)?;
+    let dest_content = std::fs::read_to_string(dest_file)?;
+
+    let mut source_doc: serde_yaml::Value = serde_yaml::from_str(&source_content)?;
+    let dest_doc: serde_yaml::Value = serde_yaml::from_str(&dest_content)?;
+
+    for path in paths {
+        if let Some(value) = get_value_at_path(&dest_doc, path) {
+            set_value_at_path(&mut source_doc, path, value.clone());
+        }
+    }
+
+    write_serialized_value(dest_file, &source_doc)?;
+    Ok(())
+}
+
+#[derive(Debug, Clone)]
+enum PathToken {
+    Key(String),
+    Index(usize),
+}
+
+fn parse_path(path: &str) -> Vec<PathToken> {
+    path.split('.')
+        .filter(|segment| !segment.is_empty())
+        .map(|segment| match segment.parse::<usize>() {
+            Ok(index) => PathToken::Index(index),
+            Err(_) => PathToken::Key(segment.to_string()),
+        })
+        .collect()
+}
+
+fn get_value_at_path<'a>(
+    value: &'a serde_yaml::Value,
+    path: &str,
+) -> Option<&'a serde_yaml::Value> {
+    let mut current = value;
+    for token in parse_path(path) {
+        match token {
+            PathToken::Key(key) => {
+                current = current.as_mapping()?.get(serde_yaml::Value::String(key))?;
+            }
+            PathToken::Index(index) => {
+                current = current.as_sequence()?.get(index)?;
+            }
+        }
+    }
+    Some(current)
+}
+
+fn set_value_at_path(value: &mut serde_yaml::Value, path: &str, new_value: serde_yaml::Value) {
+    fn set_recursive(
+        current: &mut serde_yaml::Value,
+        tokens: &[PathToken],
+        new_value: serde_yaml::Value,
+    ) {
+        if tokens.is_empty() {
+            *current = new_value;
+            return;
+        }
+
+        match &tokens[0] {
+            PathToken::Key(key) => {
+                if !current.is_mapping() {
+                    *current = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+                }
+                let map = current.as_mapping_mut().expect("mapping just created");
+                let entry = map
+                    .entry(serde_yaml::Value::String(key.clone()))
+                    .or_insert(serde_yaml::Value::Null);
+                set_recursive(entry, &tokens[1..], new_value);
+            }
+            PathToken::Index(index) => {
+                if !current.is_sequence() {
+                    *current = serde_yaml::Value::Sequence(Vec::new());
+                }
+                let seq = current.as_sequence_mut().expect("sequence just created");
+                while seq.len() <= *index {
+                    seq.push(serde_yaml::Value::Null);
+                }
+                set_recursive(&mut seq[*index], &tokens[1..], new_value);
+            }
+        }
+    }
+
+    let tokens = parse_path(path);
+    set_recursive(value, &tokens, new_value);
+}
+
+fn write_serialized_value(path: &Path, value: &serde_yaml::Value) -> AppResult<()> {
+    let extension = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or_default();
+    let content = if extension.eq_ignore_ascii_case("json") {
+        let json_value = serde_json::to_value(value)?;
+        serde_json::to_string_pretty(&json_value)? + "\n"
+    } else {
+        serde_yaml::to_string(value)?
+    };
+
+    std::fs::write(path, content)?;
+    Ok(())
 }
 
 fn write_audit_log(

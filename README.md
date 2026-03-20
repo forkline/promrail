@@ -177,6 +177,50 @@ prl versions apply -f merged-versions.json \
   --path ~/gitops/production --snapshot
 ```
 
+### Automatic Review Artifacts
+
+For multi-source `prl promote`, promrail now separates straightforward common changes from changes that need review:
+
+- common file updates are promoted normally
+- existing version-managed files such as `values.yaml`, `Chart.yaml`, and `kustomization.yaml` are updated through the structured version merge/apply flow so destination-specific config can stay in place
+- ambiguous non-version changes create a review artifact under `.promrail/review/`
+
+Typical flow:
+
+```bash
+# 1. Run the promotion normally
+prl
+
+# 2. If review is needed, promrail prints the artifact path
+#    Example: .promrail/review/grigri_cloud__homelab__nbg1_c01.yaml
+
+# 3. Classify the artifact with opencode or by editing the YAML
+#    - set status: classified
+#    - set each item decision: promote | skip
+#    - set selected_source for promoted conflicting items
+
+# 4. Run prl again
+prl
+```
+
+When the artifact still matches the current repo fingerprint, `prl` consumes it automatically on the second run and applies only the approved changes.
+
+You can also avoid repeated review by adding `preserve` rules to a component. A preserve rule keeps destination-specific YAML or JSON paths while still promoting the rest of the file from the chosen source:
+
+```yaml
+rules:
+  components:
+    platform/minio:
+      action: always
+      preserve:
+        - file: templates/kanidm-oauth2-client.yaml
+          paths:
+            - spec.origin
+            - spec.redirectUrl
+```
+
+This is designed for opencode-generated rules: inspect a real promotion diff once, identify env-specific paths, write them into `promrail.yaml`, and let future promotions run automatically.
+
 See [AGENTS.md](AGENTS.md) for opencode AI assistant guidelines.
 
 ### Config Reference

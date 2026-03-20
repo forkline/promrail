@@ -715,6 +715,175 @@ git add -A
 git commit -m "promote: multi-source version updates"
 ```
 
+### Automatic Review Flow
+
+`prl promote` can now pause multi-source promotions when it finds ambiguous non-version changes.
+
+It does this automatically when:
+
+- a component already exists in the destination but the same non-version file differs across sources
+- a new component would be introduced and `only_existing` is not filtering it out
+
+It does not require review for:
+
+- version-only changes in existing `values.yaml`, `Chart.yaml`, `kustomization.yaml`, or similar managed files
+- components excluded by `action: never`, `only_existing`, denylist rules, or protected directories
+
+#### First Run
+
+```bash
+prl
+```
+
+If review is required, promrail writes a review artifact:
+
+```text
+.promrail/review/<route-key>.yaml
+```
+
+Example artifact shape:
+
+```yaml
+version: 1
+status: pending
+sources:
+  - grigri-cloud
+  - homelab
+dest: nbg1-c01
+items:
+  - kind: conflicting_file
+    component: platform/vault
+    files:
+      - platform/vault/templates/vault.yaml
+    candidate_sources:
+      - grigri-cloud
+      - homelab
+    decision: null
+    selected_source: null
+```
+
+#### Classify The Artifact
+
+Use opencode or edit the YAML directly:
+
+```yaml
+status: classified
+items:
+  - kind: conflicting_file
+    component: platform/vault
+    files:
+      - platform/vault/templates/vault.yaml
+    candidate_sources:
+      - grigri-cloud
+      - homelab
+    decision: skip
+    selected_source: null
+```
+
+For a promoted conflicting item, choose the source explicitly:
+
+```yaml
+status: classified
+items:
+  - kind: conflicting_file
+    component: platform/minio
+    files:
+      - platform/minio/templates/pvc.yaml
+    candidate_sources:
+      - grigri-cloud
+      - homelab
+    decision: promote
+    selected_source: homelab
+```
+
+#### Second Run
+
+```bash
+prl
+```
+
+If the artifact fingerprint still matches the repo state, promrail consumes it automatically and marks it `applied` after the promotion succeeds.
+
+### Recommended Rule Strategy
+
+Use rules to reduce how often review artifacts are needed.
+
+Good candidates for `action: never`:
+
+- components that are destination-only or clearly environment-bound
+- components with env-specific domains, storage, tenants, or node placement
+
+Good candidates for `action: review`:
+
+- shared components whose non-version files regularly drift between sources and destination
+- identity, ingress, PKI, or storage-related components
+
+Good candidates for `action: always`:
+
+- stable shared operators where you mainly want version bumps and common dashboards/resources
+
+Example:
+
+```yaml
+rules:
+  components:
+    platform/postgres-operator:
+      action: always
+      notes: "Shared operator; mostly common version updates"
+
+    platform/vault:
+      action: review
+      notes: "Preserve destination-specific domains, PKI, and auth settings"
+
+    platform/minio:
+      action: always
+      notes: "Promote shared updates while preserving destination-specific OAuth and storage settings"
+      preserve:
+        - file: templates/kanidm-oauth2-client.yaml
+          paths:
+            - spec.origin
+            - spec.redirectUrl
+        - file: templates/pvc.yaml
+          paths:
+            - spec.storageClassName
+            - spec.resources.requests.storage
+
+    apps/landing:
+      action: never
+      notes: "Destination-specific"
+```
+
+### Preserve Rules
+
+Use `preserve` rules when a file contains both common changes and env-specific values.
+
+- `action: always` keeps the component promotable
+- `preserve.file` targets a file relative to the component directory
+- `preserve.paths` lists dot-separated YAML or JSON paths copied back from the destination after source selection
+
+Example:
+
+```yaml
+rules:
+  components:
+    platform/vault:
+      action: always
+      preserve:
+        - file: templates/vault.yaml
+          paths:
+            - spec.nodeSelector
+            - spec.ingress.rules
+            - spec.server.ha.raft.config
+            - spec.externalConfig
+```
+
+Recommended workflow with opencode:
+
+1. run a promotion once and inspect the env-specific diff
+2. identify the paths that must always stay destination-specific
+3. ask opencode to add `preserve` rules for those paths in `promrail.yaml`
+4. rerun `prl`; future promotions keep those destination paths automatically
+
 ### Automation Script
 
 Use the provided script for non-interactive promotion:

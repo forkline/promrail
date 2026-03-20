@@ -35,14 +35,18 @@ pub fn apply_review_decisions(
     for item in &artifact.items {
         match item.decision {
             Some(ReviewDecision::Promote) => {
-                let selected_source = item.selected_source.as_ref().ok_or_else(|| {
-                    PromrailError::ReviewArtifactInvalid(format!(
-                        "review item {} is promoted but selected_source is missing",
-                        item.id
-                    ))
-                })?;
+                let selected_source = match item.selected_source.as_ref() {
+                    Some(source) => source.clone(),
+                    None if item.candidate_sources.len() == 1 => item.candidate_sources[0].clone(),
+                    None => {
+                        return Err(PromrailError::ReviewArtifactInvalid(format!(
+                            "review item {} is promoted but selected_source is missing",
+                            item.id
+                        )));
+                    }
+                };
 
-                if !item.candidate_sources.contains(selected_source) {
+                if !item.candidate_sources.contains(&selected_source) {
                     return Err(PromrailError::ReviewArtifactInvalid(format!(
                         "review item {} selected invalid source {}",
                         item.id, selected_source
