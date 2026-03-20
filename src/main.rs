@@ -176,55 +176,6 @@ fn handle_versions_command(command: VersionsCommands) -> AppResult<()> {
                 }
             }
         }
-        VersionsCommands::Diff {
-            source,
-            dest,
-            filter_vec,
-        } => {
-            let source_path = expand_path(&source);
-            let dest_path = expand_path(&dest);
-
-            info!("Comparing versions: {} -> {}", source, dest);
-
-            let filters = if filter_vec.is_empty() {
-                vec![]
-            } else {
-                filter_vec
-            };
-
-            let source_report = versions::extract_versions(&source_path, &filters)?;
-            let dest_report = versions::extract_versions(&dest_path, &filters)?;
-
-            let diffs = versions::diff_versions(&source_report, &dest_report);
-
-            if diffs.is_empty() {
-                info!("No version differences found");
-            } else {
-                println!("\nVersion Differences:\n");
-                for diff in &diffs {
-                    println!("{}", style(&diff.component).cyan().bold());
-
-                    for chart in &diff.helm_charts {
-                        println!(
-                            "  {} {} -> {}",
-                            style(&chart.name).yellow(),
-                            style(&chart.source_version).red(),
-                            style(&chart.dest_version).green()
-                        );
-                    }
-
-                    for image in &diff.container_images {
-                        println!(
-                            "  {} {} -> {}",
-                            style(&image.name).yellow(),
-                            style(&image.source_tag).red(),
-                            style(&image.dest_tag).green()
-                        );
-                    }
-                    println!();
-                }
-            }
-        }
         VersionsCommands::Merge {
             source_vec,
             output,
@@ -358,15 +309,6 @@ fn handle_snapshot_command(command: SnapshotCommands) -> AppResult<()> {
                 info!("Rollback failed or snapshot already rolled back");
             }
         }
-        SnapshotCommands::Delete { id, path } => {
-            let dest_path = expand_path(&path);
-
-            if versions::delete(&dest_path, &id)? {
-                info!("Deleted snapshot {}", style(&id).cyan());
-            } else {
-                info!("Snapshot '{}' not found", style(&id).red());
-            }
-        }
     }
 
     Ok(())
@@ -386,18 +328,6 @@ fn handle_config_command(command: ConfigCommands) -> AppResult<()> {
                 }
                 None => println!("{}", example),
             }
-        }
-        ConfigCommands::Diff { source, dest, file } => {
-            let source_path = expand_path(&source);
-            let dest_path = expand_path(&dest);
-
-            let files = file.map(|f| f.split(',').map(|s| s.trim().to_string()).collect());
-
-            info!("Comparing config: {} -> {}", source, dest);
-
-            let diff = versions::diff_configs(&source_path, &dest_path, files)?;
-
-            println!("{}", versions::format_unified_diff(&diff));
         }
     }
 

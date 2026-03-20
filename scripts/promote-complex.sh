@@ -190,30 +190,8 @@ promrail versions merge "${SOURCE_ARGS[@]}" -o "$MERGE_OUTPUT" 2>/dev/null
 echo -e "  Merged versions written to temp file"
 echo ""
 
-# Step 3: Compare with destination
-echo -e "${GREEN}Step 3: Comparing with destination...${NC}"
-
-# Expand destination path
-DEST_EXPANDED="${DEST_PATH/#\~/$HOME}"
-
-if [ -d "$DEST_EXPANDED" ]; then
-    DIFF_OUTPUT=$(mktemp)
-    promrail versions diff --source "$MERGE_OUTPUT" --dest "$DEST_EXPANDED" > "$DIFF_OUTPUT" 2>&1 || true
-
-    if [ -s "$DIFF_OUTPUT" ]; then
-        echo -e "  ${YELLOW}Version differences found:${NC}"
-        cat "$DIFF_OUTPUT"
-    else
-        echo -e "  ${GREEN}No version differences${NC}"
-    fi
-else
-    echo -e "  ${YELLOW}Destination does not exist, will create${NC}"
-fi
-
-echo ""
-
-# Step 4: Apply changes
-echo -e "${GREEN}Step 4: Applying changes...${NC}"
+# Step 3: Apply changes
+echo -e "${GREEN}Step 3: Applying changes...${NC}"
 
 if [ -n "$DRY_RUN" ]; then
     echo -e "  ${YELLOW}Dry run mode - not applying changes${NC}"

@@ -8,8 +8,7 @@ use log::{info, warn};
 use crate::error::AppResult;
 use crate::versions::conflict::detect_conflicts;
 use crate::versions::models::{
-    ApplyOptions, ApplyResult, ComponentVersions, FileVersionChange, Snapshot, VersionChangeKind,
-    VersionReport,
+    ApplyOptions, ApplyResult, FileVersionChange, Snapshot, VersionChangeKind, VersionReport,
 };
 use crate::versions::snapshot;
 
@@ -480,72 +479,6 @@ fn update_images_recursive(
     }
 
     changes
-}
-
-/// Compare versions between two reports.
-pub fn diff_versions(
-    source: &VersionReport,
-    dest: &VersionReport,
-) -> Vec<crate::versions::models::VersionDiff> {
-    let mut diffs = Vec::new();
-
-    for (component, source_versions) in &source.components {
-        if let Some(dest_versions) = dest.components.get(component) {
-            let diff = compare_components(component, source_versions, dest_versions);
-            if !diff.helm_charts.is_empty() || !diff.container_images.is_empty() {
-                diffs.push(diff);
-            }
-        }
-    }
-
-    diffs
-}
-
-fn compare_components(
-    component: &str,
-    source: &ComponentVersions,
-    dest: &ComponentVersions,
-) -> crate::versions::models::VersionDiff {
-    use crate::versions::models::{ContainerImageDiff, HelmChartDiff, VersionDiff};
-
-    let mut helm_chart_diffs = Vec::new();
-
-    for src_chart in &source.helm_charts {
-        if let Some(dest_chart) = dest.helm_charts.iter().find(|c| c.name == src_chart.name)
-            && src_chart.version != dest_chart.version
-        {
-            helm_chart_diffs.push(HelmChartDiff {
-                name: src_chart.name.clone(),
-                source_version: src_chart.version.clone(),
-                dest_version: dest_chart.version.clone(),
-                changed: true,
-            });
-        }
-    }
-
-    let mut container_image_diffs = Vec::new();
-
-    for src_image in &source.container_images {
-        if let Some(dest_image) = dest
-            .container_images
-            .iter()
-            .find(|i| i.name == src_image.name)
-            && src_image.tag != dest_image.tag
-        {
-            container_image_diffs.push(ContainerImageDiff {
-                name: src_image.name.clone(),
-                source_tag: src_image.tag.clone(),
-                dest_tag: dest_image.tag.clone(),
-                changed: true,
-            });
-        }
-    }
-
-    VersionDiff {
-        component: component.to_string(),
-        helm_charts: helm_chart_diffs,
-        container_images: container_image_diffs,
-    }
 }
 
 #[cfg(test)]
