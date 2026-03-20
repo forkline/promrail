@@ -711,7 +711,16 @@ fn preserve_destination_paths(
         .unwrap_or_default();
 
     if extension.eq_ignore_ascii_case("yaml") || extension.eq_ignore_ascii_case("yml") {
-        return preserve_yaml_with_python(source_file, dest_file, paths);
+        return match preserve_yaml_with_python(source_file, dest_file, paths) {
+            Ok(content) => Ok(content),
+            Err(PromrailError::ReviewArtifactInvalid(message))
+                if message.contains("No module named 'ruamel'")
+                    || message.contains("No module named \"ruamel\"") =>
+            {
+                preserve_yaml_with_serde(source_file, dest_file, paths)
+            }
+            Err(err) => Err(err),
+        };
     }
 
     let source_content = std::fs::read_to_string(source_file)?;
@@ -727,6 +736,26 @@ fn preserve_destination_paths(
     }
 
     write_serialized_value(&source_doc)
+}
+
+fn preserve_yaml_with_serde(
+    source_file: &Path,
+    dest_file: &Path,
+    paths: &[String],
+) -> AppResult<Vec<u8>> {
+    let source_content = std::fs::read_to_string(source_file)?;
+    let dest_content = std::fs::read_to_string(dest_file)?;
+
+    let mut source_doc: serde_yaml::Value = serde_yaml::from_str(&source_content)?;
+    let dest_doc: serde_yaml::Value = serde_yaml::from_str(&dest_content)?;
+
+    for path in paths {
+        if let Some(value) = get_yaml_value_at_path(&dest_doc, path) {
+            set_yaml_value_at_path(&mut source_doc, path, value.clone());
+        }
+    }
+
+    Ok(serde_yaml::to_string(&source_doc)?.into_bytes())
 }
 
 fn preserve_yaml_with_python(
@@ -853,6 +882,24 @@ fn get_value_at_path<'a>(
     Some(current)
 }
 
+fn get_yaml_value_at_path<'a>(
+    value: &'a serde_yaml::Value,
+    path: &str,
+) -> Option<&'a serde_yaml::Value> {
+    let mut current = value;
+    for token in parse_path(path) {
+        match token {
+            PathToken::Key(key) => {
+                current = current.as_mapping()?.get(serde_yaml::Value::String(key))?;
+            }
+            PathToken::Index(index) => {
+                current = current.as_sequence()?.get(index)?;
+            }
+        }
+    }
+    Some(current)
+}
+
 fn set_value_at_path(value: &mut serde_json::Value, path: &str, new_value: serde_json::Value) {
     fn set_recursive(
         current: &mut serde_json::Value,
@@ -880,6 +927,45 @@ fn set_value_at_path(value: &mut serde_json::Value, path: &str, new_value: serde
                 let seq = current.as_array_mut().expect("array just created");
                 while seq.len() <= *index {
                     seq.push(serde_json::Value::Null);
+                }
+                set_recursive(&mut seq[*index], &tokens[1..], new_value);
+            }
+        }
+    }
+
+    let tokens = parse_path(path);
+    set_recursive(value, &tokens, new_value);
+}
+
+fn set_yaml_value_at_path(value: &mut serde_yaml::Value, path: &str, new_value: serde_yaml::Value) {
+    fn set_recursive(
+        current: &mut serde_yaml::Value,
+        tokens: &[PathToken],
+        new_value: serde_yaml::Value,
+    ) {
+        if tokens.is_empty() {
+            *current = new_value;
+            return;
+        }
+
+        match &tokens[0] {
+            PathToken::Key(key) => {
+                if !current.is_mapping() {
+                    *current = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+                }
+                let map = current.as_mapping_mut().expect("mapping just created");
+                let entry = map
+                    .entry(serde_yaml::Value::String(key.clone()))
+                    .or_insert(serde_yaml::Value::Null);
+                set_recursive(entry, &tokens[1..], new_value);
+            }
+            PathToken::Index(index) => {
+                if !current.is_sequence() {
+                    *current = serde_yaml::Value::Sequence(Vec::new());
+                }
+                let seq = current.as_sequence_mut().expect("sequence just created");
+                while seq.len() <= *index {
+                    seq.push(serde_yaml::Value::Null);
                 }
                 set_recursive(&mut seq[*index], &tokens[1..], new_value);
             }
