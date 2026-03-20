@@ -26,6 +26,14 @@ type CollectedFiles = HashMap<PathBuf, (String, PathBuf)>;
 /// Duplicate files: (relative_path, [source_names])
 type DuplicateFiles = Vec<(PathBuf, Vec<String>)>;
 
+#[derive(Debug, Clone)]
+struct PreparedCopy {
+    relative: PathBuf,
+    source_name: String,
+    source_file: PathBuf,
+    desired_content: Vec<u8>,
+}
+
 pub struct PromoteArgs {
     pub sources: Vec<String>,
     pub dest: String,
@@ -267,6 +275,18 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
         return Ok(());
     };
 
+    let prepared_copies = prepare_copies(config, &dest_path, &all_files, args)?;
+
+    let changed_files: CollectedFiles = prepared_copies
+        .iter()
+        .map(|prepared| {
+            (
+                prepared.relative.clone(),
+                (prepared.source_name.clone(), prepared.source_file.clone()),
+            )
+        })
+        .collect();
+
     let files_to_delete = if should_delete {
         calculate_files_to_delete(
             &discovery,
@@ -281,7 +301,7 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
     };
 
     // Show summary
-    let total_copies = all_files.len();
+    let total_copies = prepared_copies.len();
     let total_deletes = files_to_delete.len();
     let total_retained = analysis.retained_paths.len();
 
@@ -297,8 +317,8 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
         return Ok(());
     }
 
-    for relative in all_files.keys() {
-        println!("~ {}", relative.display());
+    for prepared in &prepared_copies {
+        println!("~ {}", prepared.relative.display());
     }
 
     println!();
@@ -337,10 +357,10 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
     )?;
     info!("Created snapshot: {}", snapshot_id);
 
-    for (relative, (source_name, source_file)) in &all_files {
-        let dest_file = dest_path.join(relative);
+    for prepared in &prepared_copies {
+        let dest_file = dest_path.join(&prepared.relative);
 
-        if is_protected(relative, &config.protected_dirs) && !args.include_protected {
+        if is_protected(&prepared.relative, &config.protected_dirs) && !args.include_protected {
             continue;
         }
 
@@ -348,15 +368,13 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
             std::fs::create_dir_all(parent)?;
         }
 
-        if !apply_preserve_rules(config, relative, source_file, &dest_file)? {
-            std::fs::copy(source_file, &dest_file)?;
-        }
+        std::fs::write(&dest_file, &prepared.desired_content)?;
         println!(
             "{}",
             style(format!(
                 "Copied: {} (from {})",
-                relative.display(),
-                source_name
+                prepared.relative.display(),
+                prepared.source_name
             ))
             .green()
         );
@@ -378,7 +396,7 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
     save_multi_source_snapshot(
         &dest_path,
         &snapshot_id,
-        &all_files,
+        &changed_files,
         &files_to_delete,
         &version_updated,
     )?;
@@ -401,7 +419,7 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
 
     if config.audit.enabled {
         let result = diff::PromotionResult {
-            copied: all_files
+            copied: changed_files
                 .keys()
                 .map(|p| FileDiff::added(p.clone(), String::new()))
                 .collect(),
@@ -627,44 +645,73 @@ fn apply_merged_versions(
     Ok(result.updated_files)
 }
 
-fn apply_preserve_rules(
+fn prepare_copies(
+    config: &Config,
+    dest_path: &Path,
+    all_files: &CollectedFiles,
+    args: &PromoteArgs,
+) -> AppResult<Vec<PreparedCopy>> {
+    let mut prepared = Vec::new();
+
+    for (relative, (source_name, source_file)) in all_files {
+        if is_protected(relative, &config.protected_dirs) && !args.include_protected {
+            continue;
+        }
+
+        let dest_file = dest_path.join(relative);
+        let desired_content = desired_file_content(config, relative, source_file, &dest_file)?;
+
+        let unchanged = dest_file.exists()
+            && std::fs::read(&dest_file)
+                .map(|current| current == desired_content)
+                .unwrap_or(false);
+
+        if unchanged {
+            continue;
+        }
+
+        prepared.push(PreparedCopy {
+            relative: relative.clone(),
+            source_name: source_name.clone(),
+            source_file: source_file.clone(),
+            desired_content,
+        });
+    }
+
+    Ok(prepared)
+}
+
+fn desired_file_content(
     config: &Config,
     relative: &Path,
     source_file: &Path,
     dest_file: &Path,
-) -> AppResult<bool> {
-    if !dest_file.exists() {
-        return Ok(false);
+) -> AppResult<Vec<u8>> {
+    if dest_file.exists() {
+        let component = get_component(relative);
+        if let Some(component_rule) = config.rules.get_component_rule(&component)
+            && let Some(paths) = matching_preserve_paths(component_rule, &component, relative)
+            && !paths.is_empty()
+        {
+            return preserve_destination_paths(source_file, dest_file, &paths);
+        }
     }
 
-    let component = get_component(relative);
-    let Some(component_rule) = config.rules.get_component_rule(&component) else {
-        return Ok(false);
-    };
-    let Some(paths) = matching_preserve_paths(component_rule, &component, relative) else {
-        return Ok(false);
-    };
-    if paths.is_empty() {
-        return Ok(false);
-    }
-
-    preserve_destination_paths(source_file, dest_file, &paths)?;
-    Ok(true)
+    Ok(std::fs::read(source_file)?)
 }
 
 fn preserve_destination_paths(
     source_file: &Path,
     dest_file: &Path,
     paths: &[String],
-) -> AppResult<()> {
+) -> AppResult<Vec<u8>> {
     let extension = source_file
         .extension()
         .and_then(|ext| ext.to_str())
         .unwrap_or_default();
 
     if extension.eq_ignore_ascii_case("yaml") || extension.eq_ignore_ascii_case("yml") {
-        preserve_yaml_with_python(source_file, dest_file, paths)?;
-        return Ok(());
+        return preserve_yaml_with_python(source_file, dest_file, paths);
     }
 
     let source_content = std::fs::read_to_string(source_file)?;
@@ -679,15 +726,14 @@ fn preserve_destination_paths(
         }
     }
 
-    write_serialized_value(dest_file, &source_doc)?;
-    Ok(())
+    write_serialized_value(&source_doc)
 }
 
 fn preserve_yaml_with_python(
     source_file: &Path,
     dest_file: &Path,
     paths: &[String],
-) -> AppResult<()> {
+) -> AppResult<Vec<u8>> {
     let paths_json = serde_json::to_string(paths)?;
     let script = r#"
 from pathlib import Path
@@ -746,8 +792,7 @@ for path in paths:
         continue
     set_value(source_doc, tokens, value)
 
-with dest_path.open('w', encoding='utf-8') as fh:
-    yaml.dump(source_doc, fh)
+yaml.dump(source_doc, sys.stdout)
 "#;
 
     let output = Command::new("python")
@@ -771,7 +816,7 @@ with dest_path.open('w', encoding='utf-8') as fh:
         )));
     }
 
-    Ok(())
+    Ok(output.stdout)
 }
 
 #[derive(Debug, Clone)]
@@ -845,11 +890,8 @@ fn set_value_at_path(value: &mut serde_json::Value, path: &str, new_value: serde
     set_recursive(value, &tokens, new_value);
 }
 
-fn write_serialized_value(path: &Path, value: &serde_json::Value) -> AppResult<()> {
-    let content = serde_json::to_string_pretty(value)? + "\n";
-
-    std::fs::write(path, content)?;
-    Ok(())
+fn write_serialized_value(value: &serde_json::Value) -> AppResult<Vec<u8>> {
+    Ok((serde_json::to_string_pretty(value)? + "\n").into_bytes())
 }
 
 fn write_audit_log(

@@ -1303,6 +1303,31 @@ fn test_multi_source_version_only_changes_do_not_require_review() {
 }
 
 #[test]
+fn test_multi_source_identical_files_are_not_copied() {
+    let repo = TestRepo::new();
+    repo.create_multi_source_config();
+
+    let content = "key: same\n";
+    repo.write_env_file("production", "platform/demo/config.yaml", content);
+    repo.write_env_file("staging-a", "platform/demo/config.yaml", content);
+    repo.commit_all("Add identical multi-source file");
+
+    let (success, stdout, _stderr) = repo.run_prl(&[
+        "promote",
+        "--source",
+        "staging-a",
+        "--source",
+        "staging-b",
+        "--dest",
+        "production",
+    ]);
+
+    assert!(success, "{}", stdout);
+    assert!(stdout.contains("No changes to promote"), "{}", stdout);
+    assert!(!stdout.contains("Copied:"), "{}", stdout);
+}
+
+#[test]
 fn test_multi_source_consecutive_runs_create_unique_snapshot_ids() {
     let repo = TestRepo::new();
     repo.create_multi_source_config();
