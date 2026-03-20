@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.2.0](https://github.com/forkline/prl/tree/v0.2.0) - 2026-03-20
+
+### Added
+
+- Add automatic review artifacts for multi-source promotions ([94c65eb](https://github.com/forkline/prl/commit/94c65eb007036955e3ae3b047cfeda2c258e4b68))
+- Add preserve rules for env-specific promotion config ([53b7adb](https://github.com/forkline/prl/commit/53b7adba53ea18b4b14663dafe2120af9a90fa63))
+- Add shell completion generation ([4b004e7](https://github.com/forkline/prl/commit/4b004e736a647f5b004c8a2124646d053be51abf))
+
+### Fixed
+
+- Harden multi-source promotion metadata handling ([bb91a59](https://github.com/forkline/prl/commit/bb91a5962cd78b443cf6ada71980d73265ec392d))
+- Preserve yaml formatting in env path merges ([f23ea9b](https://github.com/forkline/prl/commit/f23ea9b7f380cc85ab73277eebe0914418814cad))
+- Stop skipping external-secrets version files ([b1e8165](https://github.com/forkline/prl/commit/b1e81652a86ac5ad96c61f4efed3bffffccf8219))
+- Skip unchanged multi-source file copies ([0c3eb88](https://github.com/forkline/prl/commit/0c3eb8871bb391d57343c08d6e91dfd20a79f1ed))
+- Fall back when ruamel yaml is unavailable ([881a328](https://github.com/forkline/prl/commit/881a32872cc78550ab96742093d54de10d7fa9cc))
+- Preserve formatting in structured yaml version updates ([d9f9e34](https://github.com/forkline/prl/commit/d9f9e340cd496d6ed8e6152810f3abe9685a4bc4))
+- Repair multi-source helper script ([9b3446e](https://github.com/forkline/prl/commit/9b3446e1866397717652e553cd79f87ee71f8495))
+
+### Documentation
+
+- Add workflow for agent-driven promotion rules ([491883c](https://github.com/forkline/prl/commit/491883c443be7fee85592525fa071a61064d0791))
+
+### Chore
+
+- Clean bundled promrail config ([536cd29](https://github.com/forkline/prl/commit/536cd29ce61bb8a059e9f75d94a96641d2d32ece))
+
+### Refactor
+
+- Remove promotion log support ([a071156](https://github.com/forkline/prl/commit/a071156c276ac04d8b1de275359544b6911ea98c))
+- Remove low-value maintenance commands ([610a324](https://github.com/forkline/prl/commit/610a324cd60e6e9c44ec5965971c4c135bd4beb6))
+- Remove dead config surface ([3fb2dde](https://github.com/forkline/prl/commit/3fb2dde957708e97a13d59f0c20850e28b4b7843))
+- Remove standalone validate command ([d189820](https://github.com/forkline/prl/commit/d18982007e7c02dcef04cec1d5f2b5f5a6db9916))
+- Remove unused version rules config ([24d5f2a](https://github.com/forkline/prl/commit/24d5f2a51a916ad0254d937de61a301a04b4957d))
+- Remove legacy promotion helper script ([46a3774](https://github.com/forkline/prl/commit/46a37746b34578d98195be6ac6103a4db76c36cc))
+
+### Testing
+
+- Expand gitops workflow coverage ([d7a86fb](https://github.com/forkline/prl/commit/d7a86fbb4badefd3c0ef6506bdc07d0a13fa75b1))
+
 ## [v0.1.1](https://github.com/forkline/prl/tree/v0.1.1) - 2026-03-20
 
 ### Fixed
