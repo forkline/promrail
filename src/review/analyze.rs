@@ -150,19 +150,6 @@ pub fn analyze_multi_source_promotion(
             continue;
         }
 
-        if version_managed {
-            if dest_path.join(relative).exists() {
-                retained_paths.insert(relative.clone());
-            } else {
-                let selected = &candidates[0];
-                auto_files.insert(
-                    relative.clone(),
-                    (selected.source_name.clone(), selected.absolute_path.clone()),
-                );
-            }
-            continue;
-        }
-
         if component_action == PromotionAction::Review {
             retained_paths.insert(relative.clone());
             upsert_review_item(
@@ -172,6 +159,15 @@ pub fn analyze_multi_source_promotion(
                 relative,
                 &candidate_sources,
                 "Component is marked action: review; classify before promoting non-version files",
+            );
+            continue;
+        }
+
+        if candidates.len() == 1 || identical {
+            let selected = &candidates[0];
+            auto_files.insert(
+                relative.clone(),
+                (selected.source_name.clone(), selected.absolute_path.clone()),
             );
             continue;
         }
@@ -194,12 +190,8 @@ pub fn analyze_multi_source_promotion(
             continue;
         }
 
-        if candidates.len() == 1 || identical {
-            let selected = &candidates[0];
-            auto_files.insert(
-                relative.clone(),
-                (selected.source_name.clone(), selected.absolute_path.clone()),
-            );
+        if version_managed && dest_path.join(relative).exists() {
+            retained_paths.insert(relative.clone());
             continue;
         }
 
@@ -445,6 +437,12 @@ mod tests {
         )));
         assert!(is_version_managed_file(Path::new(
             "platform/app/kustomization.yaml"
+        )));
+        assert!(is_version_managed_file(Path::new(
+            "platform/app/Chart.yaml"
+        )));
+        assert!(is_version_managed_file(Path::new(
+            "platform/app/values-images.yaml"
         )));
         assert!(!is_version_managed_file(Path::new(
             "platform/app/config.yaml"

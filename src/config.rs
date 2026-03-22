@@ -13,7 +13,7 @@ use config_doc::ConfigDoc;
 use serde::Deserialize;
 
 /// Main configuration structure.
-#[derive(Debug, Deserialize, Clone, ConfigDoc)]
+#[derive(Debug, Default, Deserialize, Clone, ConfigDoc)]
 #[config_doc(header = "Promrail Configuration")]
 pub struct Config {
     /// Config schema version (currently 1).

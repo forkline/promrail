@@ -17,7 +17,19 @@ pub struct FileSelector {
 impl FileSelector {
     /// Create a new file selector from configuration.
     pub fn from_config(config: &Config) -> AppResult<Self> {
-        let allowlist = Self::build_globset(&config.allowlist)?;
+        let mut allowlist_patterns = config.allowlist.clone();
+        if allowlist_patterns.is_empty() {
+            allowlist_patterns = vec![
+                "**/*.yaml".to_string(),
+                "**/*.yml".to_string(),
+                "**/README.md".to_string(),
+                "**/README*".to_string(),
+            ];
+        } else {
+            allowlist_patterns.push("**/README.md".to_string());
+            allowlist_patterns.push("**/README*".to_string());
+        }
+        let allowlist = Self::build_globset(&allowlist_patterns)?;
         let denylist = Self::build_globset(&config.denylist)?;
         let protected_dirs = config.protected_dirs.iter().map(PathBuf::from).collect();
 
@@ -114,6 +126,7 @@ impl FileSelector {
 #[cfg(test)]
 mod tests {
     use super::FileSelector;
+    use crate::config::Config;
     use std::path::Path;
 
     #[test]
@@ -127,5 +140,36 @@ mod tests {
         assert!(!selector.should_promote(Path::new(".promotion-snapshots.yaml"), false));
         assert!(!selector.should_promote(Path::new(".promrail/review/test.yaml"), false));
         assert!(selector.should_promote(Path::new("platform/app/config.yaml"), false));
+    }
+
+    #[test]
+    fn readme_files_are_always_allowed() {
+        let config = Config {
+            allowlist: vec!["platform/**/*.yaml".to_string()],
+            denylist: vec![],
+            protected_dirs: vec![],
+            ..Default::default()
+        };
+        let selector = FileSelector::from_config(&config).expect("selector");
+
+        assert!(selector.should_promote(Path::new("platform/app/config.yaml"), false));
+        assert!(selector.should_promote(Path::new("README.md"), false));
+        assert!(selector.should_promote(Path::new("platform/README.md"), false));
+        assert!(selector.should_promote(Path::new("apps/README.org"), false));
+        assert!(!selector.should_promote(Path::new("apps/other.md"), false));
+    }
+
+    #[test]
+    fn empty_allowlist_includes_readme_by_default() {
+        let config = Config {
+            allowlist: vec![],
+            denylist: vec![],
+            protected_dirs: vec![],
+            ..Default::default()
+        };
+        let selector = FileSelector::from_config(&config).expect("selector");
+
+        assert!(selector.should_promote(Path::new("README.md"), false));
+        assert!(selector.should_promote(Path::new("platform/config.yaml"), false));
     }
 }

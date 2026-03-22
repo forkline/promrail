@@ -130,6 +130,13 @@ denylist:
   - "**/secrets*"
   - "**/*secret*"
 
+rules:
+  conflict_resolution:
+    config_strategy: source_priority
+    source_order:
+      - staging-b
+      - staging-a
+
 git:
   require_clean_tree: false
 "#;
@@ -141,9 +148,13 @@ git:
     fn create_multi_source_config_with_review_rule(&self, component: &str) {
         self.create_multi_source_config();
         let mut config = fs::read_to_string(&self.config_path).expect("Failed to read config");
-        config.push_str(&format!(
-            "\nrules:\n  components:\n    {component}:\n      action: review\n      notes: \"Needs review during promotion\"\n"
-        ));
+        let insert = format!(
+            "\n  components:\n    {}:\n      action: review\n      notes: \"Needs review during promotion\"\n",
+            component
+        );
+        if let Some(pos) = config.find("\ngit:") {
+            config.insert_str(pos, &insert);
+        }
         fs::write(&self.config_path, config).expect("Failed to update config");
     }
 
@@ -159,9 +170,13 @@ git:
             .iter()
             .map(|path| format!("            - {}\n", path))
             .collect::<String>();
-        config.push_str(&format!(
-            "\nrules:\n  components:\n    {component}:\n      action: always\n      notes: \"Preserve destination-specific paths\"\n      preserve:\n        - file: {file}\n          paths:\n{joined_paths}"
-        ));
+        let insert = format!(
+            "\n  components:\n    {}:\n      action: always\n      notes: \"Preserve destination-specific paths\"\n      preserve:\n        - file: {}\n          paths:\n{}",
+            component, file, joined_paths
+        );
+        if let Some(pos) = config.find("\ngit:") {
+            config.insert_str(pos, &insert);
+        }
         fs::write(&self.config_path, config).expect("Failed to update config");
     }
 
@@ -1372,7 +1387,7 @@ fn test_multi_source_preserve_rule_keeps_destination_env_values() {
 }
 
 #[test]
-fn test_multi_source_version_only_changes_do_not_require_review() {
+fn test_multi_source_conflicting_values_is_version_merged() {
     let repo = TestRepo::new();
     repo.create_multi_source_config();
 
@@ -1405,15 +1420,11 @@ fn test_multi_source_version_only_changes_do_not_require_review() {
 
     assert!(success, "{}", stdout);
     assert!(
-        !stdout.contains("Review required before promotion."),
+        stdout.contains("files preserved for structured version merge"),
         "{}",
         stdout
     );
     assert!(repo.review_artifact_path().is_none());
-    assert_eq!(
-        repo.read_env_file("production", "platform/api/values.yaml"),
-        Some("image:\n  repository: ghcr.io/demo/api\n  tag: 1.2.0\n".to_string())
-    );
 }
 
 #[test]
@@ -1448,20 +1459,20 @@ fn test_multi_source_consecutive_runs_create_unique_snapshot_ids() {
 
     repo.write_env_file(
         "production",
-        "platform/api/values.yaml",
-        "image:\n  repository: ghcr.io/demo/api\n  tag: 1.0.0\n",
+        "platform/api/kustomization.yaml",
+        "resources:\n  - deployment.yaml\n",
     );
     repo.write_env_file(
         "staging-a",
-        "platform/api/values.yaml",
-        "image:\n  repository: ghcr.io/demo/api\n  tag: 1.1.0\n",
+        "platform/api/kustomization.yaml",
+        "resources:\n  - deployment.yaml\n  - service.yaml\n",
     );
     repo.write_env_file(
         "staging-b",
-        "platform/api/values.yaml",
-        "image:\n  repository: ghcr.io/demo/api\n  tag: 1.2.0\n",
+        "platform/api/kustomization.yaml",
+        "resources:\n  - deployment.yaml\n  - service.yaml\n",
     );
-    repo.commit_all("Add version files for snapshot id test");
+    repo.commit_all("Add kustomization files for snapshot id test");
 
     let (success, stdout, stderr) = repo.run_prl(&[
         "--force",
@@ -1474,6 +1485,23 @@ fn test_multi_source_consecutive_runs_create_unique_snapshot_ids() {
         "production",
     ]);
     assert!(success, "stdout: {}\nstderr: {}", stdout, stderr);
+    assert!(
+        stdout.contains("Copied:"),
+        "First run should copy file: {}",
+        stdout
+    );
+
+    repo.write_env_file(
+        "staging-a",
+        "platform/api/kustomization.yaml",
+        "resources:\n  - deployment.yaml\n  - service.yaml\n  - configmap.yaml\n",
+    );
+    repo.write_env_file(
+        "staging-b",
+        "platform/api/kustomization.yaml",
+        "resources:\n  - deployment.yaml\n  - service.yaml\n  - configmap.yaml\n",
+    );
+    repo.commit_all("Update kustomization files");
 
     let (success, stdout, stderr) = repo.run_prl(&[
         "--force",
@@ -1498,7 +1526,7 @@ fn test_multi_source_consecutive_runs_create_unique_snapshot_ids() {
 }
 
 #[test]
-fn test_realistic_gitops_workflow_preserves_dest_config_and_uses_source_priority() {
+fn test_realistic_gitops_workflow_version_merges_conflicting_values() {
     let repo = TestRepo::new();
     repo.create_realistic_gitops_config();
 
@@ -1523,18 +1551,11 @@ fn test_realistic_gitops_workflow_preserves_dest_config_and_uses_source_priority
 
     assert!(success, "{}", stdout);
     assert!(
-        !stdout.contains("Review required before promotion."),
+        stdout.contains("files preserved for structured version merge"),
         "{}",
         stdout
     );
     assert!(repo.review_artifact_path().is_none());
-    assert_eq!(
-        repo.read_env_file("nbg1-c01", "platform/api/values.yaml"),
-        Some(
-            "image:\n  repository: ghcr.io/demo/api\n  tag: 1.2.0\ningress:\n  host: api.nbg1.example.com\n"
-                .to_string()
-        )
-    );
 }
 
 #[test]
