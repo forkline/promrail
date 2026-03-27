@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.3.1](https://github.com/forkline/prl/tree/v0.3.1) - 2026-03-27
+
+### Build
+
+- Vendor libgit2 for release binaries (#17) ([f88d6c8](https://github.com/forkline/prl/commit/f88d6c85ca78ff7b0652f2c9fcbcef8a9159c707))
+
 ## [v0.3.0](https://github.com/forkline/prl/tree/v0.3.0) - 2026-03-22
 
 ### Added
