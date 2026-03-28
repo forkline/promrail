@@ -1,6 +1,6 @@
 <h1 align="center">
   <br>
-  <img src="assets/logo.svg" alt="logo" width="200">
+  <img src="assets/logo.svg" alt="logo" width="500">
   <br>
   Promrail
   <br>
@@ -30,8 +30,11 @@ Git-native GitOps promotion tool written in Rust.
 
 Promrail is now intentionally focused on two workflows:
 
-- **Simple promotion**: copy and reconcile allowlisted files from one source environment to one destination
-- **3-way / multi-source promotion**: combine common changes from multiple sources, preserve destination-specific config where configured, and stop for review only when rules cannot resolve ambiguity safely
+- **Simple promotion**: copy and reconcile allowlisted files from one source environment to one
+  destination
+- **3-way / multi-source promotion**: combine common changes from multiple sources, preserve
+  destination-specific config where configured, and stop for review only when rules cannot resolve
+  ambiguity safely
 
 The main supported commands are:
 
@@ -43,7 +46,8 @@ The main supported commands are:
 - `prl snapshot list|show|rollback`
 - `prl config show|example`
 
-Promrail no longer includes separate maintenance commands for config diffing, version diffing, promotion logs, or standalone validation.
+Promrail no longer includes separate maintenance commands for config diffing, version diffing,
+promotion logs, or standalone validation.
 
 ## Installation
 
@@ -126,14 +130,14 @@ prl --confirm
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `diff` | Show what would change without applying |
-| `promote` | Copy allowlisted files from source to destination |
-| `versions` | Version extraction and management |
-| `snapshot` | Snapshot management for rollbacks |
-| `config` | Configuration reference and examples |
-| `completions` | Generate shell completions |
+| Command       | Description                                       |
+| ------------- | ------------------------------------------------- |
+| `diff`        | Show what would change without applying           |
+| `promote`     | Copy allowlisted files from source to destination |
+| `versions`    | Version extraction and management                 |
+| `snapshot`    | Snapshot management for rollbacks                 |
+| `config`      | Configuration reference and examples              |
+| `completions` | Generate shell completions                        |
 
 ### Version Management
 
@@ -197,10 +201,13 @@ prl versions apply -f merged-versions.json \
 
 ### Automatic Review Artifacts
 
-For multi-source `prl promote`, promrail now separates straightforward common changes from changes that need review:
+For multi-source `prl promote`, promrail now separates straightforward common changes from changes
+that need review:
 
 - common file updates are promoted normally
-- existing version-managed files such as `values.yaml`, `Chart.yaml`, and `kustomization.yaml` are updated through the structured version merge/apply flow so destination-specific config can stay in place
+- existing version-managed files such as `values.yaml`, `Chart.yaml`, and `kustomization.yaml` are
+  updated through the structured version merge/apply flow so destination-specific config can stay in
+  place
 - ambiguous non-version changes create a review artifact under `.promrail/review/`
 
 Typical flow:
@@ -221,9 +228,12 @@ prl
 prl
 ```
 
-When the artifact still matches the current repo fingerprint, `prl` consumes it automatically on the second run and applies only the approved changes.
+When the artifact still matches the current repo fingerprint, `prl` consumes it automatically on the
+second run and applies only the approved changes.
 
-You can also avoid repeated review by adding `preserve` rules to a component. A preserve rule keeps destination-specific YAML or JSON paths while still promoting the rest of the file from the chosen source:
+You can also avoid repeated review by adding `preserve` rules to a component. A preserve rule keeps
+destination-specific YAML or JSON paths while still promoting the rest of the file from the chosen
+source:
 
 ```yaml
 rules:
@@ -237,7 +247,8 @@ rules:
             - spec.redirectUrl
 ```
 
-This is designed for agent-generated rules: inspect a real promotion diff once, identify env-specific paths, write them into `promrail.yaml`, and let future promotions run automatically.
+This is designed for agent-generated rules: inspect a real promotion diff once, identify
+env-specific paths, write them into `promrail.yaml`, and let future promotions run automatically.
 
 ### Current Limits
 
@@ -310,24 +321,24 @@ prl config example -o promrail.yaml
 
 ## Options
 
-| Option | Description |
-|--------|-------------|
-| `-c, --config <FILE>` | Path to config file (env: `PROMRAIL_CONFIG`) |
-| `-r, --repo <NAME>` | Repository name from config (env: `PROMRAIL_REPO`) |
+| Option                    | Description                                                |
+| ------------------------- | ---------------------------------------------------------- |
+| `-c, --config <FILE>`     | Path to config file (env: `PROMRAIL_CONFIG`)               |
+| `-r, --repo <NAME>`       | Repository name from config (env: `PROMRAIL_REPO`)         |
 | `-l, --log-level <LEVEL>` | Log level: error, warn, info, debug, trace (default: info) |
 
 ### Diff/Promote Options
 
-| Option | Description |
-|--------|-------------|
-| `-s, --source <ENV>` | Source environment (uses default_source if not set) |
-| `-d, --dest <ENV>` | Destination environment (uses default_dest if not set) |
-| `--no-delete` | Do not delete extra files in destination (delete is default) |
-| `--dest-based` | Only operate on directories that exist in both environments |
-| `--include-protected` | Include protected directories (custom, env, local) |
-| `--dry-run` | Don't modify files (promote only) |
-| `--diff` | Show file content changes (promote only) |
-| `--confirm` | Ask for confirmation before applying (promote only) |
+| Option                | Description                                                  |
+| --------------------- | ------------------------------------------------------------ |
+| `-s, --source <ENV>`  | Source environment (uses default_source if not set)          |
+| `-d, --dest <ENV>`    | Destination environment (uses default_dest if not set)       |
+| `--no-delete`         | Do not delete extra files in destination (delete is default) |
+| `--dest-based`        | Only operate on directories that exist in both environments  |
+| `--include-protected` | Include protected directories (custom, env, local)           |
+| `--dry-run`           | Don't modify files (promote only)                            |
+| `--diff`              | Show file content changes (promote only)                     |
+| `--confirm`           | Ask for confirmation before applying (promote only)          |
 
 ## Configuration
 
@@ -395,13 +406,13 @@ Files must match the allowlist AND not match the denylist:
 
 ```yaml
 allowlist:
-  - "platform/**/*.yaml"    # All YAML files under platform/
-  - "system/**/*.yaml"      # All YAML files under system/
-  - "apps/specific/**/*.yaml"  # Specific app only
+  - "platform/**/*.yaml" # All YAML files under platform/
+  - "system/**/*.yaml" # All YAML files under system/
+  - "apps/specific/**/*.yaml" # Specific app only
 
 denylist:
-  - "**/secrets*"           # Any file with "secrets" in the name
-  - "**/test/**"            # Test directories
+  - "**/secrets*" # Any file with "secrets" in the name
+  - "**/test/**" # Test directories
 ```
 
 ### Protected Directories
@@ -410,14 +421,15 @@ These directories are never modified during promotion:
 
 ```yaml
 protected_dirs:
-  - custom      # Environment-specific customizations
-  - env         # Environment variables
-  - local       # Local development configs
+  - custom # Environment-specific customizations
+  - env # Environment variables
+  - local # Local development configs
 ```
 
 ### Delete Behavior
 
-By default, prl deletes files in destination that don't exist in source (matching the Python promote script):
+By default, prl deletes files in destination that don't exist in source (matching the Python promote
+script):
 
 ```bash
 # Default: delete extra files in destination
@@ -448,7 +460,7 @@ rules:
 
   # Conflict resolution
   conflict_resolution:
-    version_strategy: highest  # highest | source_priority
+    version_strategy: highest # highest | source_priority
     source_order: [staging-work, staging-homelab]
 
   # Component-level rules
