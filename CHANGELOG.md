@@ -9,6 +9,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Configurable output levels for promotion feedback (`minimal`, `normal`, `verbose`)
+- Display module for formatted promotion output with colored version changes
+
+## [v0.4.0](https://github.com/forkline/prl/tree/v0.4.0) - 2026-03-30
+
+### Added
+
 - Structured version updates for single-source promotions - version-managed files (kustomization.yaml, Chart.yaml, values.yaml) now use structured updates that preserve destination-specific content while updating versions
 - `version_handling` option in component rules to override structured update behavior (`whole_file` to force wholesale copy)
 
