@@ -8,6 +8,7 @@ use log::{info, warn};
 mod cli;
 mod commands;
 mod config;
+mod display;
 mod error;
 mod files;
 mod git;

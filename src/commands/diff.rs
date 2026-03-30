@@ -65,12 +65,14 @@ pub fn execute(
     let source_path = PathBuf::from(&source_env.path);
     let dest_path = PathBuf::from(&dest_env.path);
 
-    println!(
-        "Comparing {} -> {}",
-        style(&args.source).cyan(),
-        style(&args.dest).yellow()
-    );
-    println!();
+    if !quiet_summary {
+        println!(
+            "Comparing {} -> {}",
+            style(&args.source).cyan(),
+            style(&args.dest).yellow()
+        );
+        println!();
+    }
 
     let selector = FileSelector::from_config(config)?;
     let discovery = FileDiscovery::new(selector);
@@ -124,7 +126,9 @@ pub fn execute(
 
         match (source_content, dest_content) {
             (Some(src), None) => {
-                println!("{}", style(format!("+ {}", file.display())).green());
+                if !quiet_summary {
+                    println!("{}", style(format!("+ {}", file.display())).green());
+                }
                 let diff = FileDiff::added(file.clone(), src);
                 if show_diff {
                     display_file_diff(&diff);
@@ -133,7 +137,9 @@ pub fn execute(
             }
             (Some(src), Some(dst)) => {
                 if src != dst {
-                    println!("{}", style(format!("~ {}", file.display())).yellow());
+                    if !quiet_summary {
+                        println!("{}", style(format!("~ {}", file.display())).yellow());
+                    }
                     let diff = FileDiff::modified(file.clone(), dst, src);
                     if show_diff {
                         display_file_diff(&diff);
@@ -165,14 +171,16 @@ pub fn execute(
                     continue;
                 }
 
-                println!("{}", style(format!("- {}", file.display())).red());
+                if !quiet_summary {
+                    println!("{}", style(format!("- {}", file.display())).red());
+                }
                 deleted.push(file.clone());
             }
         }
     }
 
-    println!();
     if !quiet_summary {
+        println!();
         println!("Summary:");
         println!("  {} files to copy", style(copied.len()).green());
         if args.delete {

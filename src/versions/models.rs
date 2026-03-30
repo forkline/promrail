@@ -71,6 +71,18 @@ pub struct ApplyResult {
     pub skipped_files: Vec<PathBuf>,
     pub conflicts: Vec<Conflict>,
     pub snapshot_id: Option<String>,
+    pub version_changes: Vec<VersionChangeSummary>,
+}
+
+/// Summary of a version change for display.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VersionChangeSummary {
+    pub component: String,
+    pub file: String,
+    pub kind: VersionChangeKind,
+    pub name: String,
+    pub before: String,
+    pub after: String,
 }
 
 /// Conflict detected during version apply.

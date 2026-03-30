@@ -6,9 +6,10 @@ use std::process::Command;
 use console::style;
 use log::{debug, info, warn};
 
+use crate::commands::default_filter;
 use crate::commands::diff::{self, DiffArgs};
-use crate::commands::{default_filter, print_promotion_summary};
 use crate::config::{Config, PromotionAction, VersionHandling};
+use crate::display::{PromotionOutputData, print_promotion_result};
 use crate::error::{AppResult, PromrailError};
 use crate::files::{FileDiscovery, FileSelector};
 use crate::git::GitRepo;
@@ -19,6 +20,7 @@ use crate::review::{
     artifact_from_analysis, artifact_path, artifact_ready_for_apply, load_artifact, save_artifact,
 };
 use crate::versions;
+use crate::versions::models::VersionChangeSummary;
 
 /// Collected files from sources: relative path -> (source_name, absolute_path)
 type CollectedFiles = HashMap<PathBuf, (String, PathBuf)>;
@@ -180,7 +182,17 @@ fn execute_single_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) ->
     let result = diff::execute(config, repo, &diff_args, args.show_diff, true)?;
 
     if result.copied.is_empty() && result.deleted.is_empty() {
-        info!("No changes to promote");
+        print_promotion_result(
+            &PromotionOutputData {
+                copied_files: vec![],
+                deleted_files: vec![],
+                version_changes: vec![],
+                sources: vec![source.clone()],
+                dest: args.dest.clone(),
+                dry_run: args.dry_run,
+            },
+            config.output.level.clone(),
+        );
         return Ok(());
     }
 
@@ -201,7 +213,20 @@ fn execute_single_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) ->
         });
 
     if args.dry_run {
-        info!("Dry run complete. No files were modified.");
+        let version_changes =
+            collect_version_changes_for_dry_run(&version_managed_copies, &source_path, &dest_path)?;
+
+        print_promotion_result(
+            &PromotionOutputData {
+                copied_files: regular_copies.iter().map(|f| f.path.clone()).collect(),
+                deleted_files: result.deleted,
+                version_changes,
+                sources: vec![source.clone()],
+                dest: args.dest.clone(),
+                dry_run: true,
+            },
+            config.output.level.clone(),
+        );
         return Ok(());
     }
 
@@ -212,16 +237,16 @@ fn execute_single_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) ->
 
     info!("Applying changes...");
 
+    let mut copied_files = Vec::new();
+    let mut all_version_changes = Vec::new();
+
     // Copy regular files
     for file_diff in &regular_copies {
         let source_file = source_path.join(&file_diff.path);
         let dest_file = dest_path.join(&file_diff.path);
 
         repo.copy_file(&source_file, &dest_file)?;
-        println!(
-            "{}",
-            style(format!("Copied: {}", file_diff.path.display())).green()
-        );
+        copied_files.push(file_diff.path.clone());
     }
 
     // Apply structured version updates for version-managed files
@@ -245,19 +270,7 @@ fn execute_single_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) ->
             },
         )?;
 
-        for updated in &apply_result.updated_files {
-            println!(
-                "{}",
-                style(format!(
-                    "Updated versions: {}",
-                    updated
-                        .strip_prefix(&dest_path)
-                        .unwrap_or(updated)
-                        .display()
-                ))
-                .cyan()
-            );
-        }
+        all_version_changes = apply_result.version_changes;
 
         // Copy version-managed files that had no version changes
         for file_diff in &version_managed_copies {
@@ -266,27 +279,111 @@ fn execute_single_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) ->
                 let source_file = source_path.join(&file_diff.path);
                 let dest_file = dest_path.join(&file_diff.path);
                 repo.copy_file(&source_file, &dest_file)?;
-                println!(
-                    "{}",
-                    style(format!("Copied: {}", file_diff.path.display())).green()
-                );
+                copied_files.push(file_diff.path.clone());
             }
         }
     }
+
+    let deleted_files = if should_delete {
+        result.deleted.clone()
+    } else {
+        Vec::new()
+    };
 
     if should_delete {
         for file in &result.deleted {
             let dest_file = dest_path.join(file);
             repo.delete_file(&dest_file)?;
-            println!("{}", style(format!("Deleted: {}", file.display())).red());
         }
     }
 
-    println!();
-    println!("{}", style("Promotion complete!").bold());
-    print_promotion_summary(regular_copies.len(), result.deleted.len(), should_delete);
+    print_promotion_result(
+        &PromotionOutputData {
+            copied_files,
+            deleted_files,
+            version_changes: all_version_changes,
+            sources: vec![source.clone()],
+            dest: args.dest.clone(),
+            dry_run: false,
+        },
+        config.output.level.clone(),
+    );
 
     Ok(())
+}
+
+fn collect_version_changes_for_dry_run(
+    version_managed_copies: &[crate::git::FileDiff],
+    source_path: &Path,
+    dest_path: &Path,
+) -> AppResult<Vec<VersionChangeSummary>> {
+    if version_managed_copies.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let components: Vec<String> = version_managed_copies
+        .iter()
+        .map(|f| get_component(&f.path))
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+
+    let report = versions::extract_versions(source_path, &[])?;
+    let apply_result = versions::apply_versions(
+        &report,
+        dest_path,
+        &versions::ApplyOptions {
+            components,
+            dry_run: true,
+            check_conflicts: false,
+            create_snapshot: false,
+        },
+    )?;
+
+    Ok(apply_result.version_changes)
+}
+
+fn compute_version_changes_for_components(
+    retained_paths: &HashSet<PathBuf>,
+    source_paths: &[(String, PathBuf)],
+    dest_path: &Path,
+    rules: &crate::config::PromotionRules,
+) -> AppResult<Vec<VersionChangeSummary>> {
+    let components: Vec<String> = retained_paths
+        .iter()
+        .filter(|path| is_version_managed_file(path))
+        .map(|path| get_component(path))
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+
+    if components.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut sources = Vec::new();
+    for (source_name, source_path) in source_paths {
+        let report = versions::extract_versions(source_path, &[])?;
+        sources.push((source_name.clone(), report));
+    }
+
+    let merged = versions::merge_versions(&sources, rules)?;
+    if merged.report.components.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let result = versions::apply_versions(
+        &merged.report,
+        dest_path,
+        &versions::ApplyOptions {
+            components,
+            dry_run: true,
+            check_conflicts: false,
+            create_snapshot: false,
+        },
+    )?;
+
+    Ok(result.version_changes)
 }
 
 fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> AppResult<()> {
@@ -362,38 +459,44 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
     let total_deletes = files_to_delete.len();
     let total_retained = analysis.retained_paths.len();
 
-    if args.sources.len() == 1 {
-        println!("Comparing {} -> {}", args.sources[0], args.dest);
-    } else {
-        println!("Comparing {} sources -> {}", args.sources.len(), args.dest);
-    }
-    println!();
+    let copied_files: Vec<PathBuf> = prepared_copies.iter().map(|p| p.relative.clone()).collect();
 
+    // Early return for no changes
     if total_copies == 0 && total_deletes == 0 && total_retained == 0 {
-        println!("No changes to promote");
+        print_promotion_result(
+            &PromotionOutputData {
+                copied_files: vec![],
+                deleted_files: vec![],
+                version_changes: vec![],
+                sources: args.sources.clone(),
+                dest: args.dest.clone(),
+                dry_run: args.dry_run,
+            },
+            config.output.level.clone(),
+        );
         return Ok(());
     }
 
-    for prepared in &prepared_copies {
-        println!("~ {}", prepared.relative.display());
-    }
-
-    println!();
-    println!("Summary:");
-    println!("  {} files to copy", style(total_copies).green());
-    if total_retained > 0 {
-        println!(
-            "  {} files preserved for structured version merge",
-            style(total_retained).cyan()
-        );
-    }
-    if should_delete && total_deletes > 0 {
-        println!("  {} files to delete", style(total_deletes).red());
-    }
-
+    // Handle dry-run
     if args.dry_run {
-        println!();
-        println!("Dry run complete. No files were modified.");
+        let version_changes = compute_version_changes_for_components(
+            &analysis.retained_paths,
+            &source_paths,
+            &dest_path,
+            &config.rules,
+        )?;
+
+        print_promotion_result(
+            &PromotionOutputData {
+                copied_files,
+                deleted_files: files_to_delete.clone(),
+                version_changes,
+                sources: args.sources.clone(),
+                dest: args.dest.clone(),
+                dry_run: true,
+            },
+            config.output.level.clone(),
+        );
         return Ok(());
     }
 
@@ -426,36 +529,24 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
         }
 
         std::fs::write(&dest_file, &prepared.desired_content)?;
-        println!(
-            "{}",
-            style(format!(
-                "Copied: {} (from {})",
-                prepared.relative.display(),
-                prepared.source_name
-            ))
-            .green()
-        );
     }
 
     if should_delete {
         for relative in &files_to_delete {
             let dest_file = dest_path.join(relative);
             std::fs::remove_file(&dest_file)?;
-            println!(
-                "{}",
-                style(format!("Deleted: {}", relative.display())).red()
-            );
         }
     }
 
-    let version_updated = apply_merged_versions(config, &source_paths, &dest_path, &analysis)?;
+    let (version_updated_paths, version_changes) =
+        apply_merged_versions(config, &source_paths, &dest_path, &analysis)?;
 
     save_multi_source_snapshot(
         &dest_path,
         &snapshot_id,
         &changed_files,
         &files_to_delete,
-        &version_updated,
+        &version_updated_paths,
     )?;
 
     if let Some(mut artifact) = applied_review_artifact {
@@ -466,13 +557,19 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
         save_artifact(&repo.path, &artifact)?;
     }
 
-    println!();
-    if args.sources.len() == 1 {
-        println!("{}", style("Promotion complete!").bold());
-    } else {
-        println!("{}", style("Multi-source promotion complete!").bold());
-    }
-    print_promotion_summary(total_copies, total_deletes, should_delete);
+    // Print final results
+    let final_copied: Vec<PathBuf> = prepared_copies.iter().map(|p| p.relative.clone()).collect();
+    print_promotion_result(
+        &PromotionOutputData {
+            copied_files: final_copied,
+            deleted_files: files_to_delete.clone(),
+            version_changes,
+            sources: args.sources.clone(),
+            dest: args.dest.clone(),
+            dry_run: false,
+        },
+        config.output.level.clone(),
+    );
 
     Ok(())
 }
@@ -646,9 +743,9 @@ fn apply_merged_versions(
     source_paths: &[(String, PathBuf)],
     dest_path: &Path,
     analysis: &crate::review::analyze::PromotionAnalysis,
-) -> AppResult<Vec<PathBuf>> {
+) -> AppResult<(Vec<PathBuf>, Vec<VersionChangeSummary>)> {
     if source_paths.is_empty() {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), Vec::new()));
     }
 
     let components: Vec<String> = analysis
@@ -661,7 +758,7 @@ fn apply_merged_versions(
         .collect();
 
     if components.is_empty() {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), Vec::new()));
     }
 
     let mut sources = Vec::new();
@@ -672,7 +769,7 @@ fn apply_merged_versions(
 
     let merged = versions::merge_versions(&sources, &config.rules)?;
     if merged.report.components.is_empty() {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), Vec::new()));
     }
 
     let result = versions::apply_versions(
@@ -686,7 +783,7 @@ fn apply_merged_versions(
         },
     )?;
 
-    Ok(result.updated_files)
+    Ok((result.updated_files, result.version_changes))
 }
 
 fn prepare_copies(
