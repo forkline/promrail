@@ -320,7 +320,7 @@ fn default_ignore_gitignore() -> bool {
 #[derive(Debug, Deserialize, Clone, ConfigDoc)]
 pub struct OutputConfig {
     /// Output verbosity level for promotion results.
-    #[config_doc(default = "minimal", example = "normal")]
+    #[config_doc(default = "normal", example = "verbose")]
     #[serde(default)]
     pub level: OutputLevel,
 }
@@ -328,7 +328,7 @@ pub struct OutputConfig {
 impl Default for OutputConfig {
     fn default() -> Self {
         Self {
-            level: OutputLevel::Minimal,
+            level: OutputLevel::Normal,
         }
     }
 }
@@ -338,9 +338,9 @@ impl Default for OutputConfig {
 #[serde(rename_all = "snake_case")]
 pub enum OutputLevel {
     /// Show only summary counts.
-    #[default]
     Minimal,
     /// Show summary and version changes list.
+    #[default]
     Normal,
     /// Show detailed output with component grouping.
     Verbose,

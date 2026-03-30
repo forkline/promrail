@@ -5,14 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v0.4.0](https://github.com/forkline/prl/tree/v0.4.0) - 2026-03-30
 
 ### Added
 
-- Configurable output levels for promotion feedback (`minimal`, `normal`, `verbose`)
-- Display module for formatted promotion output with colored version changes
+- Structured version updates for single-source promotions ([152deea](https://github.com/forkline/prl/commit/152deea6bfc4cff6dd9bd1e4f5aa0f878fbde2bc))
 
-## [v0.4.0](https://github.com/forkline/prl/tree/v0.4.0) - 2026-03-30
+### Documentation
+
+- Update logo ([a384e5c](https://github.com/forkline/prl/commit/a384e5ce8e00b22f6a56b7566425a70aecc77b4b))
+- Change logo width to 500 ([910a017](https://github.com/forkline/prl/commit/910a017c10693d9e497c7f65a270b6c5a34bdc1b))
+
+## [Unreleased]
 
 ### Added
 
