@@ -1485,9 +1485,10 @@ fn test_multi_source_consecutive_runs_create_unique_snapshot_ids() {
         "production",
     ]);
     assert!(success, "stdout: {}\nstderr: {}", stdout, stderr);
+    // kustomization.yaml is version-managed, so it uses structured updates
     assert!(
-        stdout.contains("Copied:"),
-        "First run should copy file: {}",
+        stdout.contains("files preserved for structured version merge"),
+        "First run should preserve file for structured update: {}",
         stdout
     );
 
@@ -1844,6 +1845,314 @@ fn test_overwrite_same_content_no_change() {
     assert_eq!(
         repo.read_production_file("platform/config.yaml"),
         Some(content.to_string())
+    );
+}
+
+// =============================================================================
+// SINGLE-SOURCE VERSION-MANAGED FILE TESTS
+// =============================================================================
+
+#[test]
+fn test_single_source_kustomization_yaml_uses_structured_version_update() {
+    let repo = TestRepo::new();
+    repo.create_config();
+
+    // Destination has kustomization.yaml with version 1.0.0 and env-specific resources
+    repo.write_production_file(
+        "platform/monitoring/kustomization.yaml",
+        r#"helmCharts:
+  - name: kube-prometheus-stack
+    version: 1.0.0
+    repo: https://prometheus-community.github.io/helm-charts
+resources:
+  - resources/etcd-secrets-updater.yaml
+  - resources/env-specific-config.yaml
+"#,
+    );
+
+    // Source has kustomization.yaml with version 2.0.0 and different resources
+    repo.write_staging_file(
+        "platform/monitoring/kustomization.yaml",
+        r#"helmCharts:
+  - name: kube-prometheus-stack
+    version: 2.0.0
+    repo: https://prometheus-community.github.io/helm-charts
+resources:
+  - resources/homelab-specific.yaml
+"#,
+    );
+    repo.commit_all("Add kustomization files");
+
+    let (success, stdout, _stderr) =
+        repo.run_prl(&["promote", "--source", "staging", "--dest", "production"]);
+
+    assert!(success, "{}", stdout);
+    // Version-managed files use structured updates
+    assert!(
+        stdout.contains("Updated versions: platform/monitoring/kustomization.yaml"),
+        "Expected structured update message in stdout: {}",
+        stdout
+    );
+
+    // Version should be updated, but resources should be preserved from destination
+    let result = repo
+        .read_production_file("platform/monitoring/kustomization.yaml")
+        .expect("File should exist");
+    assert!(
+        result.contains("version: 2.0.0"),
+        "Version should be updated: {}",
+        result
+    );
+    assert!(
+        result.contains("resources/etcd-secrets-updater.yaml"),
+        "Destination resources should be preserved: {}",
+        result
+    );
+    assert!(
+        !result.contains("resources/homelab-specific.yaml"),
+        "Source resources should NOT be added: {}",
+        result
+    );
+}
+
+#[test]
+fn test_single_source_chart_yaml_uses_structured_version_update() {
+    let repo = TestRepo::new();
+    repo.create_config();
+
+    // Destination has Chart.yaml with version 1.0.0 and env-specific config
+    repo.write_production_file(
+        "apps/myapp/Chart.yaml",
+        r#"apiVersion: v2
+name: myapp
+version: 1.0.0
+dependencies:
+  - name: redis
+    version: 10.0.0
+    repository: https://charts.bitnami.com/bitnami
+"#,
+    );
+
+    // Source has Chart.yaml with updated redis version
+    repo.write_staging_file(
+        "apps/myapp/Chart.yaml",
+        r#"apiVersion: v2
+name: myapp
+version: 1.0.0
+dependencies:
+  - name: redis
+    version: 11.0.0
+    repository: https://charts.bitnami.com/bitnami
+"#,
+    );
+    repo.commit_all("Add Chart files");
+
+    let (success, stdout, _stderr) =
+        repo.run_prl(&["promote", "--source", "staging", "--dest", "production"]);
+
+    assert!(success, "{}", stdout);
+    // Version-managed files use structured updates
+    assert!(
+        stdout.contains("Updated versions: apps/myapp/Chart.yaml"),
+        "Expected structured update message in stdout: {}",
+        stdout
+    );
+
+    let result = repo
+        .read_production_file("apps/myapp/Chart.yaml")
+        .expect("File should exist");
+    assert!(
+        result.contains("version: 11.0.0"),
+        "Redis version should be updated: {}",
+        result
+    );
+}
+
+#[test]
+fn test_version_handling_whole_file_override() {
+    let repo = TestRepo::new();
+
+    // Create config with version_handling override
+    let config = r#"
+version: 1
+
+repos:
+  test:
+    path: .
+    environments:
+      staging:
+        path: staging
+      production:
+        path: production
+
+default_repo: test
+
+protected_dirs:
+  - custom
+  - env
+
+allowlist:
+  - "**/*.yaml"
+
+rules:
+  components:
+    platform/monitoring:
+      action: always
+      version_handling: whole_file
+
+git:
+  require_clean_tree: false
+"#;
+    fs::write(&repo.config_path, config).expect("Failed to write config");
+
+    // Destination has kustomization.yaml with version 1.0.0 and env-specific resources
+    repo.write_production_file(
+        "platform/monitoring/kustomization.yaml",
+        r#"helmCharts:
+  - name: kube-prometheus-stack
+    version: 1.0.0
+resources:
+  - resources/etcd-secrets-updater.yaml
+"#,
+    );
+
+    // Source has kustomization.yaml with version 2.0.0 and different resources
+    repo.write_staging_file(
+        "platform/monitoring/kustomization.yaml",
+        r#"helmCharts:
+  - name: kube-prometheus-stack
+    version: 2.0.0
+resources:
+  - resources/homelab-specific.yaml
+"#,
+    );
+    repo.commit_all("Add kustomization files");
+
+    let (success, stdout, _stderr) =
+        repo.run_prl(&["promote", "--source", "staging", "--dest", "production"]);
+
+    assert!(success, "{}", stdout);
+
+    // With whole_file override, entire file should be copied
+    let result = repo
+        .read_production_file("platform/monitoring/kustomization.yaml")
+        .expect("File should exist");
+    assert!(
+        result.contains("version: 2.0.0"),
+        "Version should be updated: {}",
+        result
+    );
+    assert!(
+        result.contains("resources/homelab-specific.yaml"),
+        "Source resources should be copied with whole_file: {}",
+        result
+    );
+    assert!(
+        !result.contains("resources/etcd-secrets-updater.yaml"),
+        "Destination resources should be replaced with whole_file: {}",
+        result
+    );
+}
+
+#[test]
+fn test_single_source_values_yaml_uses_structured_version_update() {
+    let repo = TestRepo::new();
+    repo.create_config();
+
+    // Destination has values.yaml with image tag 1.0.0 and env-specific ingress
+    repo.write_production_file(
+        "platform/api/values.yaml",
+        r#"image:
+  repository: ghcr.io/demo/api
+  tag: 1.0.0
+ingress:
+  host: api.prod.example.com
+  annotations:
+    external-dns.alpha.kubernetes.io/target: prod.example.com
+"#,
+    );
+
+    // Source has values.yaml with image tag 2.0.0 and different ingress
+    repo.write_staging_file(
+        "platform/api/values.yaml",
+        r#"image:
+  repository: ghcr.io/demo/api
+  tag: 2.0.0
+ingress:
+  host: api.staging.example.com
+  annotations:
+    external-dns.alpha.kubernetes.io/target: staging.example.com
+"#,
+    );
+    repo.commit_all("Add values files");
+
+    let (success, stdout, _stderr) =
+        repo.run_prl(&["promote", "--source", "staging", "--dest", "production"]);
+
+    assert!(success, "{}", stdout);
+    // Version-managed files use structured updates
+    assert!(
+        stdout.contains("Updated versions: platform/api/values.yaml"),
+        "Expected structured update message in stdout: {}",
+        stdout
+    );
+
+    let result = repo
+        .read_production_file("platform/api/values.yaml")
+        .expect("File should exist");
+    assert!(
+        result.contains("tag: 2.0.0"),
+        "Image tag should be updated: {}",
+        result
+    );
+    assert!(
+        result.contains("api.prod.example.com"),
+        "Destination ingress host should be preserved: {}",
+        result
+    );
+    assert!(
+        !result.contains("api.staging.example.com"),
+        "Source ingress host should NOT be copied: {}",
+        result
+    );
+}
+
+#[test]
+fn test_new_component_kustomization_is_whole_file_copied() {
+    // New components (not existing in destination) should still be whole-file copied
+    let repo = TestRepo::new();
+    repo.create_config();
+
+    // Source has a new component with kustomization.yaml
+    repo.write_staging_file(
+        "platform/new-service/kustomization.yaml",
+        r#"helmCharts:
+  - name: myapp
+    version: 1.0.0
+resources:
+  - resources/deployment.yaml
+"#,
+    );
+    repo.commit_all("Add new service");
+
+    let (success, stdout, _stderr) =
+        repo.run_prl(&["promote", "--source", "staging", "--dest", "production"]);
+
+    assert!(success, "{}", stdout);
+
+    // New component should be copied entirely (structured update only applies to existing files)
+    let result = repo
+        .read_production_file("platform/new-service/kustomization.yaml")
+        .expect("File should exist");
+    assert!(
+        result.contains("version: 1.0.0"),
+        "Version should be present: {}",
+        result
+    );
+    assert!(
+        result.contains("resources/deployment.yaml"),
+        "Resources should be copied for new component: {}",
+        result
     );
 }
 

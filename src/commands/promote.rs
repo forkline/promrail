@@ -8,7 +8,7 @@ use log::{debug, info, warn};
 
 use crate::commands::diff::{self, DiffArgs};
 use crate::commands::{default_filter, print_promotion_summary};
-use crate::config::{Config, PromotionAction};
+use crate::config::{Config, PromotionAction, VersionHandling};
 use crate::error::{AppResult, PromrailError};
 use crate::files::{FileDiscovery, FileSelector};
 use crate::git::GitRepo;
@@ -184,6 +184,22 @@ fn execute_single_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) ->
         return Ok(());
     }
 
+    // Separate version-managed files from regular copies
+    // Version-managed files use structured updates unless version_handling: whole_file
+    let (version_managed_copies, regular_copies): (Vec<_>, Vec<_>) =
+        result.copied.into_iter().partition(|f| {
+            if !is_version_managed_file(&f.path) || !dest_path.join(&f.path).exists() {
+                return false;
+            }
+            // Check for version_handling override
+            let component = get_component(&f.path);
+            let component_rule = config.rules.get_component_rule(&component);
+            let use_whole_file = component_rule
+                .map(|r| r.version_handling == VersionHandling::WholeFile)
+                .unwrap_or(false);
+            !use_whole_file
+        });
+
     if args.dry_run {
         info!("Dry run complete. No files were modified.");
         return Ok(());
@@ -196,7 +212,8 @@ fn execute_single_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) ->
 
     info!("Applying changes...");
 
-    for file_diff in &result.copied {
+    // Copy regular files
+    for file_diff in &regular_copies {
         let source_file = source_path.join(&file_diff.path);
         let dest_file = dest_path.join(&file_diff.path);
 
@@ -205,6 +222,56 @@ fn execute_single_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) ->
             "{}",
             style(format!("Copied: {}", file_diff.path.display())).green()
         );
+    }
+
+    // Apply structured version updates for version-managed files
+    if !version_managed_copies.is_empty() {
+        let components: Vec<String> = version_managed_copies
+            .iter()
+            .map(|f| get_component(&f.path))
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
+
+        let report = versions::extract_versions(&source_path, &[])?;
+        let apply_result = versions::apply_versions(
+            &report,
+            &dest_path,
+            &versions::ApplyOptions {
+                components,
+                dry_run: false,
+                check_conflicts: false,
+                create_snapshot: false,
+            },
+        )?;
+
+        for updated in &apply_result.updated_files {
+            println!(
+                "{}",
+                style(format!(
+                    "Updated versions: {}",
+                    updated
+                        .strip_prefix(&dest_path)
+                        .unwrap_or(updated)
+                        .display()
+                ))
+                .cyan()
+            );
+        }
+
+        // Copy version-managed files that had no version changes
+        for file_diff in &version_managed_copies {
+            let updated_path = dest_path.join(&file_diff.path);
+            if !apply_result.updated_files.contains(&updated_path) {
+                let source_file = source_path.join(&file_diff.path);
+                let dest_file = dest_path.join(&file_diff.path);
+                repo.copy_file(&source_file, &dest_file)?;
+                println!(
+                    "{}",
+                    style(format!("Copied: {}", file_diff.path.display())).green()
+                );
+            }
+        }
     }
 
     if should_delete {
@@ -217,7 +284,7 @@ fn execute_single_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) ->
 
     println!();
     println!("{}", style("Promotion complete!").bold());
-    print_promotion_summary(result.copied.len(), result.deleted.len(), should_delete);
+    print_promotion_summary(regular_copies.len(), result.deleted.len(), should_delete);
 
     Ok(())
 }

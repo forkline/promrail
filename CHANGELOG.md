@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Structured version updates for single-source promotions - version-managed files (kustomization.yaml, Chart.yaml, values.yaml) now use structured updates that preserve destination-specific content while updating versions
+- `version_handling` option in component rules to override structured update behavior (`whole_file` to force wholesale copy)
+
+### Changed
+
+- Version-managed files in single-source promotions are no longer wholesale copied; only version fields are updated from source, preserving destination configuration
+
 ## [v0.3.1](https://github.com/forkline/prl/tree/v0.3.1) - 2026-03-27
 
 ### Build
