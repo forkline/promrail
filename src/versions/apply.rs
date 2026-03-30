@@ -8,7 +8,8 @@ use log::{info, warn};
 use crate::error::AppResult;
 use crate::versions::conflict::detect_conflicts;
 use crate::versions::models::{
-    ApplyOptions, ApplyResult, FileVersionChange, Snapshot, VersionChangeKind, VersionReport,
+    ApplyOptions, ApplyResult, FileVersionChange, Snapshot, VersionChangeKind,
+    VersionChangeSummary, VersionReport,
 };
 use crate::versions::snapshot;
 
@@ -79,54 +80,60 @@ pub fn apply_versions(
             // Update kustomization.yaml
             if !versions.helm_charts.is_empty() {
                 let kustomization_path = component_dir.join("kustomization.yaml");
-                if kustomization_path.exists()
-                    && update_kustomization_versions(
+                if kustomization_path.exists() {
+                    let changes = update_kustomization_versions(
                         &kustomization_path,
                         &versions.helm_charts,
                         options.dry_run,
                         component_path,
                         snapshot_obj.as_mut(),
-                    )?
-                {
-                    info!(
-                        "Updated helm chart versions in {}",
-                        kustomization_path.display()
-                    );
-                    result.updated_files.push(kustomization_path);
+                    )?;
+                    if !changes.is_empty() {
+                        info!(
+                            "Updated helm chart versions in {}",
+                            kustomization_path.display()
+                        );
+                        result.updated_files.push(kustomization_path);
+                        add_version_changes(&mut result, component_path, &changes);
+                    }
                 }
             }
 
             // Update Chart.yaml
             if !versions.helm_charts.is_empty() {
                 let chart_path = component_dir.join("Chart.yaml");
-                if chart_path.exists()
-                    && update_chart_versions(
+                if chart_path.exists() {
+                    let changes = update_chart_versions(
                         &chart_path,
                         &versions.helm_charts,
                         options.dry_run,
                         component_path,
                         snapshot_obj.as_mut(),
-                    )?
-                {
-                    info!("Updated chart dependencies in {}", chart_path.display());
-                    result.updated_files.push(chart_path);
+                    )?;
+                    if !changes.is_empty() {
+                        info!("Updated chart dependencies in {}", chart_path.display());
+                        result.updated_files.push(chart_path);
+                        add_version_changes(&mut result, component_path, &changes);
+                    }
                 }
             }
 
             // Update values.yaml
             if !versions.container_images.is_empty() {
                 let values_path = component_dir.join("values.yaml");
-                if values_path.exists()
-                    && update_values_images(
+                if values_path.exists() {
+                    let changes = update_values_images(
                         &values_path,
                         &versions.container_images,
                         options.dry_run,
                         component_path,
                         snapshot_obj.as_mut(),
-                    )?
-                {
-                    info!("Updated image tags in {}", values_path.display());
-                    result.updated_files.push(values_path);
+                    )?;
+                    if !changes.is_empty() {
+                        info!("Updated image tags in {}", values_path.display());
+                        result.updated_files.push(values_path);
+                        add_version_changes(&mut result, component_path, &changes);
+                    }
                 }
             }
         }
@@ -144,6 +151,23 @@ pub fn apply_versions(
     Ok(result)
 }
 
+fn add_version_changes(
+    result: &mut ApplyResult,
+    component_path: &str,
+    changes: &[FileVersionChange],
+) {
+    for change in changes {
+        result.version_changes.push(VersionChangeSummary {
+            component: component_path.to_string(),
+            file: change.file.clone(),
+            kind: change.kind.clone(),
+            name: change.name.clone(),
+            before: change.before.clone(),
+            after: change.after.clone(),
+        });
+    }
+}
+
 /// Update helm chart versions in kustomization.yaml.
 fn update_kustomization_versions(
     path: &Path,
@@ -151,11 +175,10 @@ fn update_kustomization_versions(
     dry_run: bool,
     component: &str,
     snapshot: Option<&mut Snapshot>,
-) -> AppResult<bool> {
+) -> AppResult<Vec<FileVersionChange>> {
     let content = std::fs::read_to_string(path)?;
     let mut doc: serde_yaml::Value = serde_yaml::from_str(&content)?;
 
-    let mut changed = false;
     let mut changes = Vec::new();
 
     if let Some(helm_charts) = doc.get_mut("helmCharts").and_then(|v| v.as_sequence_mut()) {
@@ -178,18 +201,17 @@ fn update_kustomization_versions(
                         after: new_version.version.clone(),
                     });
                     *version = serde_yaml::Value::String(new_version.version.clone());
-                    changed = true;
                 }
             }
         }
     }
 
-    if changed {
+    if !changes.is_empty() {
         if let Some(snap) = snapshot {
             snap.version_changes
                 .entry(component.to_string())
                 .or_default()
-                .extend(changes);
+                .extend(changes.clone());
             snap.files_modified.push(path.display().to_string());
         }
 
@@ -198,7 +220,7 @@ fn update_kustomization_versions(
         }
     }
 
-    Ok(changed)
+    Ok(changes)
 }
 
 /// Update chart dependency versions in Chart.yaml.
@@ -208,11 +230,10 @@ fn update_chart_versions(
     dry_run: bool,
     component: &str,
     snapshot: Option<&mut Snapshot>,
-) -> AppResult<bool> {
+) -> AppResult<Vec<FileVersionChange>> {
     let content = std::fs::read_to_string(path)?;
     let mut doc: serde_yaml::Value = serde_yaml::from_str(&content)?;
 
-    let mut changed = false;
     let mut changes = Vec::new();
 
     if let Some(dependencies) = doc
@@ -235,18 +256,17 @@ fn update_chart_versions(
                         after: new_version.version.clone(),
                     });
                     *version = serde_yaml::Value::String(new_version.version.clone());
-                    changed = true;
                 }
             }
         }
     }
 
-    if changed {
+    if !changes.is_empty() {
         if let Some(snap) = snapshot {
             snap.version_changes
                 .entry(component.to_string())
                 .or_default()
-                .extend(changes);
+                .extend(changes.clone());
             snap.files_modified.push(path.display().to_string());
         }
 
@@ -255,7 +275,7 @@ fn update_chart_versions(
         }
     }
 
-    Ok(changed)
+    Ok(changes)
 }
 
 /// Update container image tags in values.yaml.
@@ -265,19 +285,18 @@ fn update_values_images(
     dry_run: bool,
     component: &str,
     snapshot: Option<&mut Snapshot>,
-) -> AppResult<bool> {
+) -> AppResult<Vec<FileVersionChange>> {
     let content = std::fs::read_to_string(path)?;
     let mut doc: serde_yaml::Value = serde_yaml::from_str(&content)?;
 
     let changes = update_images_recursive(&mut doc, images);
-    let changed = !changes.is_empty();
 
-    if changed {
+    if !changes.is_empty() {
         if let Some(snap) = snapshot {
             snap.version_changes
                 .entry(component.to_string())
                 .or_default()
-                .extend(changes);
+                .extend(changes.clone());
             snap.files_modified.push(path.display().to_string());
         }
 
@@ -286,7 +305,7 @@ fn update_values_images(
         }
     }
 
-    Ok(changed)
+    Ok(changes)
 }
 
 fn write_kustomization_yaml(
@@ -532,10 +551,10 @@ patches:
             source_file: "kustomization.yaml".to_string(),
         }];
 
-        let changed =
+        let changes =
             update_kustomization_versions(&path, &charts, false, "platform/external-secrets", None)
                 .expect("update should succeed");
-        assert!(changed);
+        assert!(!changes.is_empty());
 
         let updated = fs::read_to_string(&path).expect("read updated kustomization");
         assert!(updated.contains("version: 2.4.0"));

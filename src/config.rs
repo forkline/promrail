@@ -80,6 +80,10 @@ pub struct Config {
     /// Multi-source promotion rules for complex workflows.
     #[serde(default)]
     pub rules: PromotionRules,
+
+    /// Output configuration for promotion feedback.
+    #[serde(default)]
+    pub output: OutputConfig,
 }
 
 /// Promotion rules for multi-source workflows.
@@ -310,6 +314,46 @@ pub struct PromoteOptions {
 
 fn default_ignore_gitignore() -> bool {
     true
+}
+
+/// Output configuration for promotion feedback.
+#[derive(Debug, Deserialize, Clone, ConfigDoc)]
+pub struct OutputConfig {
+    /// Output verbosity level for promotion results.
+    #[config_doc(default = "normal", example = "verbose")]
+    #[serde(default)]
+    pub level: OutputLevel,
+}
+
+impl Default for OutputConfig {
+    fn default() -> Self {
+        Self {
+            level: OutputLevel::Normal,
+        }
+    }
+}
+
+/// Output verbosity level.
+#[derive(Debug, Deserialize, Clone, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum OutputLevel {
+    /// Show only summary counts.
+    Minimal,
+    /// Show summary and version changes list.
+    #[default]
+    Normal,
+    /// Show detailed output with component grouping.
+    Verbose,
+}
+
+impl std::fmt::Display for OutputLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OutputLevel::Minimal => write!(f, "minimal"),
+            OutputLevel::Normal => write!(f, "normal"),
+            OutputLevel::Verbose => write!(f, "verbose"),
+        }
+    }
 }
 
 impl PromotionRules {

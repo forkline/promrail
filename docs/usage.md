@@ -917,6 +917,69 @@ rules:
 - Component has no version information but uses version-managed filename
 - You want complete replacement of destination file
 
+### Output Configuration
+
+Configure promotion output verbosity in `promrail.yaml`:
+
+```yaml
+output:
+  level: normal  # minimal | normal | verbose
+```
+
+**Output Levels:**
+
+| Level | Description |
+|-------|-------------|
+| `minimal` | Show only summary counts |
+| `normal` | Show copied files, summary, and version changes (default) |
+| `verbose` | Show header, copied files, structured version updates by component, and summary |
+
+**Example Output:**
+
+Minimal:
+```
+Summary:
+  3 files copied
+  2 versions updated
+
+Dry run complete. No files were modified.
+```
+
+Normal (default):
+```
+Copied:
+  apps/keycloak/exports/realm.json
+  system/loki/resources/prometheus-rules-alerts.yaml
+
+Summary:
+  3 files copied
+  2 versions updated
+
+Version updates:
+  kube-prometheus-stack: 82.10.4 → 82.15.1
+  prometheus-blackbox-exporter: 11.8.0 → 11.9.1
+
+Dry run complete. No files were modified.
+```
+
+Verbose:
+```
+Comparing 2 sources -> nbg1-c01
+
+Copied:
+  apps/keycloak/exports/realm.json
+  system/loki/resources/prometheus-rules-alerts.yaml
+
+Structured Version Updates:
+  system/monitoring:
+    kube-prometheus-stack (chart): 82.10.4 → 82.15.1
+    prometheus-blackbox-exporter (chart): 11.8.0 → 11.9.1
+
+Summary:
+  3 files copied
+  2 versions updated
+```
+
 ### Post-Promotion Rule Tuning
 
 When `prl --force` still leaves environment-specific changes in the diff, the recommended loop is:
