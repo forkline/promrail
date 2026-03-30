@@ -4,7 +4,7 @@ resolver = "2"
 
 [package]
 name = "promrail"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2024"
 authors = ["Pando85 <pando855@gmail.com>"]
 description = "Git-native GitOps promotion tool"
