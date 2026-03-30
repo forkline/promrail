@@ -16,54 +16,28 @@ pub struct PromotionOutputData {
 }
 
 pub fn print_promotion_result(data: &PromotionOutputData, level: OutputLevel) {
+    print_header(data);
+
+    if data.copied_files.is_empty()
+        && data.deleted_files.is_empty()
+        && data.version_changes.is_empty()
+    {
+        println!();
+        println!("No changes to promote");
+        return;
+    }
+
+    for file in &data.copied_files {
+        println!("~ {}", file.display());
+    }
+    println!();
+
+    print_summary(data, level);
+
     if data.dry_run {
-        print_dry_run(data, level);
-    } else {
-        print_applied(data, level);
-    }
-}
-
-fn print_dry_run(data: &PromotionOutputData, level: OutputLevel) {
-    print_header(data);
-
-    if data.copied_files.is_empty()
-        && data.deleted_files.is_empty()
-        && data.version_changes.is_empty()
-    {
         println!();
-        println!("No changes to promote");
-        return;
+        println!("Dry run complete. No files were modified.");
     }
-
-    for file in &data.copied_files {
-        println!("~ {}", file.display());
-    }
-    println!();
-
-    print_summary(data, level);
-
-    println!();
-    println!("Dry run complete. No files were modified.");
-}
-
-fn print_applied(data: &PromotionOutputData, level: OutputLevel) {
-    print_header(data);
-
-    if data.copied_files.is_empty()
-        && data.deleted_files.is_empty()
-        && data.version_changes.is_empty()
-    {
-        println!();
-        println!("No changes to promote");
-        return;
-    }
-
-    for file in &data.copied_files {
-        println!("~ {}", file.display());
-    }
-    println!();
-
-    print_summary(data, level);
 }
 
 fn print_header(data: &PromotionOutputData) {

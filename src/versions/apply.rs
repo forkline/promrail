@@ -94,16 +94,7 @@ pub fn apply_versions(
                             kustomization_path.display()
                         );
                         result.updated_files.push(kustomization_path);
-                        for change in &changes {
-                            result.version_changes.push(VersionChangeSummary {
-                                component: component_path.to_string(),
-                                file: change.file.clone(),
-                                kind: change.kind.clone(),
-                                name: change.name.clone(),
-                                before: change.before.clone(),
-                                after: change.after.clone(),
-                            });
-                        }
+                        add_version_changes(&mut result, component_path, &changes);
                     }
                 }
             }
@@ -122,16 +113,7 @@ pub fn apply_versions(
                     if !changes.is_empty() {
                         info!("Updated chart dependencies in {}", chart_path.display());
                         result.updated_files.push(chart_path);
-                        for change in &changes {
-                            result.version_changes.push(VersionChangeSummary {
-                                component: component_path.to_string(),
-                                file: change.file.clone(),
-                                kind: change.kind.clone(),
-                                name: change.name.clone(),
-                                before: change.before.clone(),
-                                after: change.after.clone(),
-                            });
-                        }
+                        add_version_changes(&mut result, component_path, &changes);
                     }
                 }
             }
@@ -150,16 +132,7 @@ pub fn apply_versions(
                     if !changes.is_empty() {
                         info!("Updated image tags in {}", values_path.display());
                         result.updated_files.push(values_path);
-                        for change in &changes {
-                            result.version_changes.push(VersionChangeSummary {
-                                component: component_path.to_string(),
-                                file: change.file.clone(),
-                                kind: change.kind.clone(),
-                                name: change.name.clone(),
-                                before: change.before.clone(),
-                                after: change.after.clone(),
-                            });
-                        }
+                        add_version_changes(&mut result, component_path, &changes);
                     }
                 }
             }
@@ -176,6 +149,23 @@ pub fn apply_versions(
     }
 
     Ok(result)
+}
+
+fn add_version_changes(
+    result: &mut ApplyResult,
+    component_path: &str,
+    changes: &[FileVersionChange],
+) {
+    for change in changes {
+        result.version_changes.push(VersionChangeSummary {
+            component: component_path.to_string(),
+            file: change.file.clone(),
+            kind: change.kind.clone(),
+            name: change.name.clone(),
+            before: change.before.clone(),
+            after: change.after.clone(),
+        });
+    }
 }
 
 /// Update helm chart versions in kustomization.yaml.
