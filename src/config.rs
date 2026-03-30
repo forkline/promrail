@@ -211,6 +211,26 @@ impl std::fmt::Display for PromotionAction {
     }
 }
 
+/// Version handling strategy for version-managed files.
+#[derive(Debug, Deserialize, Clone, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum VersionHandling {
+    /// Use structured version updates, preserve destination content.
+    #[default]
+    Structured,
+    /// Copy entire file from source (override for special cases).
+    WholeFile,
+}
+
+impl std::fmt::Display for VersionHandling {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VersionHandling::Structured => write!(f, "structured"),
+            VersionHandling::WholeFile => write!(f, "whole_file"),
+        }
+    }
+}
+
 /// Component-level promotion rule.
 #[derive(Debug, Deserialize, Clone, ConfigDoc)]
 pub struct ComponentRule {
@@ -226,6 +246,10 @@ pub struct ComponentRule {
     /// Preserve destination-specific configuration paths for matching files.
     #[serde(default)]
     pub preserve: Vec<PreserveRule>,
+
+    /// Override version-managed file handling strategy.
+    #[serde(default)]
+    pub version_handling: VersionHandling,
 }
 
 /// File-specific preserve rule for YAML/JSON promotion.

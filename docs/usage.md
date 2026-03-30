@@ -867,6 +867,56 @@ Recommended workflow with a coding agent:
 3. ask the agent to add `preserve` rules for those paths in `promrail.yaml`
 4. rerun `prl`; future promotions keep those destination paths automatically
 
+### Version-Managed File Handling
+
+Version-managed files (`kustomization.yaml`, `Chart.yaml`, `values.yaml`) receive special treatment during promotion:
+
+**Structured Version Updates**: When a version-managed file exists in the destination, promrail uses structured updates instead of wholesale copies:
+- Only version fields (helm chart versions, container image tags) are updated from source
+- All other content (resources, patches, env-specific config) is preserved from destination
+- This applies to both single-source and multi-source promotions
+
+**Example**: `kustomization.yaml` in source has:
+```yaml
+helmCharts:
+  - name: kube-prometheus-stack
+    version: 82.15.1
+resources:
+  - resources/homelab-specific.yaml
+```
+
+Destination has:
+```yaml
+helmCharts:
+  - name: kube-prometheus-stack
+    version: 82.10.4
+resources:
+  - resources/etcd-secrets-updater.yaml
+```
+
+After promotion, destination becomes:
+```yaml
+helmCharts:
+  - name: kube-prometheus-stack
+    version: 82.15.1  # Updated from source
+resources:
+  - resources/etcd-secrets-updater.yaml  # Preserved from destination
+```
+
+**Override with `version_handling`**: To force wholesale copy for specific components:
+
+```yaml
+rules:
+  components:
+    platform/special-case:
+      action: always
+      version_handling: whole_file  # Copy entire file instead of structured update
+```
+
+**When to use `version_handling: whole_file`**:
+- Component has no version information but uses version-managed filename
+- You want complete replacement of destination file
+
 ### Post-Promotion Rule Tuning
 
 When `prl --force` still leaves environment-specific changes in the diff, the recommended loop is:

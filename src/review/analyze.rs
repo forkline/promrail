@@ -5,7 +5,9 @@ use std::path::{Path, PathBuf};
 use crate::commands::promote::{
     PromoteArgs, component_exists_in_dest, get_component, is_protected,
 };
-use crate::config::{ComponentRule, Config, ConfigStrategy, PromotionAction, PromotionRules};
+use crate::config::{
+    ComponentRule, Config, ConfigStrategy, PromotionAction, PromotionRules, VersionHandling,
+};
 use crate::error::AppResult;
 use crate::files::{FileDiscovery, FileSelector};
 use crate::review::models::{
@@ -165,6 +167,20 @@ pub fn analyze_multi_source_promotion(
 
         if candidates.len() == 1 || identical {
             let selected = &candidates[0];
+
+            // Version-managed files that exist in destination use structured updates
+            // unless explicitly overridden to whole_file
+            if version_managed && dest_path.join(relative).exists() {
+                let use_whole_file = component_rule
+                    .map(|r| r.version_handling == VersionHandling::WholeFile)
+                    .unwrap_or(false);
+
+                if !use_whole_file {
+                    retained_paths.insert(relative.clone());
+                    continue;
+                }
+            }
+
             auto_files.insert(
                 relative.clone(),
                 (selected.source_name.clone(), selected.absolute_path.clone()),
@@ -183,6 +199,20 @@ pub fn analyze_multi_source_promotion(
                 .iter()
                 .find(|candidate| candidate.source_name == selected_source)
                 .unwrap_or(&candidates[0]);
+
+            // Version-managed files that exist in destination use structured updates
+            // unless explicitly overridden to whole_file
+            if version_managed && dest_path.join(relative).exists() {
+                let use_whole_file = component_rule
+                    .map(|r| r.version_handling == VersionHandling::WholeFile)
+                    .unwrap_or(false);
+
+                if !use_whole_file {
+                    retained_paths.insert(relative.clone());
+                    continue;
+                }
+            }
+
             auto_files.insert(
                 relative.clone(),
                 (selected.source_name.clone(), selected.absolute_path.clone()),
@@ -191,8 +221,14 @@ pub fn analyze_multi_source_promotion(
         }
 
         if version_managed && dest_path.join(relative).exists() {
-            retained_paths.insert(relative.clone());
-            continue;
+            let use_whole_file = component_rule
+                .map(|r| r.version_handling == VersionHandling::WholeFile)
+                .unwrap_or(false);
+
+            if !use_whole_file {
+                retained_paths.insert(relative.clone());
+                continue;
+            }
         }
 
         retained_paths.insert(relative.clone());
