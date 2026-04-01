@@ -197,7 +197,8 @@ fn execute_single_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) ->
     }
 
     // Separate version-managed files from regular copies
-    // Version-managed files use structured updates unless version_handling: whole_file
+    // Version-managed files use structured updates only if version_handling: structured is set
+    // Default behavior is whole_file (copy entire file)
     let (version_managed_copies, regular_copies): (Vec<_>, Vec<_>) =
         result.copied.into_iter().partition(|f| {
             if !is_version_managed_file(&f.path) || !dest_path.join(&f.path).exists() {
@@ -206,10 +207,9 @@ fn execute_single_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) ->
             // Check for version_handling override
             let component = get_component(&f.path);
             let component_rule = config.rules.get_component_rule(&component);
-            let use_whole_file = component_rule
-                .map(|r| r.version_handling == VersionHandling::WholeFile)
-                .unwrap_or(false);
-            !use_whole_file
+            component_rule
+                .map(|r| r.version_handling == VersionHandling::Structured)
+                .unwrap_or(false)
         });
 
     if args.dry_run {

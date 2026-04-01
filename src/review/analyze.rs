@@ -169,13 +169,14 @@ pub fn analyze_multi_source_promotion(
             let selected = &candidates[0];
 
             // Version-managed files that exist in destination use structured updates
-            // unless explicitly overridden to whole_file
+            // only if explicitly set via version_handling: structured
+            // Default is whole_file (copy entire file)
             if version_managed && dest_path.join(relative).exists() {
-                let use_whole_file = component_rule
-                    .map(|r| r.version_handling == VersionHandling::WholeFile)
+                let use_structured = component_rule
+                    .map(|r| r.version_handling == VersionHandling::Structured)
                     .unwrap_or(false);
 
-                if !use_whole_file {
+                if use_structured {
                     retained_paths.insert(relative.clone());
                     continue;
                 }
@@ -201,13 +202,14 @@ pub fn analyze_multi_source_promotion(
                 .unwrap_or(&candidates[0]);
 
             // Version-managed files that exist in destination use structured updates
-            // unless explicitly overridden to whole_file
+            // only if explicitly set via version_handling: structured
+            // Default is whole_file (copy entire file)
             if version_managed && dest_path.join(relative).exists() {
-                let use_whole_file = component_rule
-                    .map(|r| r.version_handling == VersionHandling::WholeFile)
+                let use_structured = component_rule
+                    .map(|r| r.version_handling == VersionHandling::Structured)
                     .unwrap_or(false);
 
-                if !use_whole_file {
+                if use_structured {
                     retained_paths.insert(relative.clone());
                     continue;
                 }
@@ -221,11 +223,11 @@ pub fn analyze_multi_source_promotion(
         }
 
         if version_managed && dest_path.join(relative).exists() {
-            let use_whole_file = component_rule
-                .map(|r| r.version_handling == VersionHandling::WholeFile)
+            let use_structured = component_rule
+                .map(|r| r.version_handling == VersionHandling::Structured)
                 .unwrap_or(false);
 
-            if !use_whole_file {
+            if use_structured {
                 retained_paths.insert(relative.clone());
                 continue;
             }

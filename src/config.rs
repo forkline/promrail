@@ -219,11 +219,11 @@ impl std::fmt::Display for PromotionAction {
 #[derive(Debug, Deserialize, Clone, Default, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum VersionHandling {
-    /// Use structured version updates, preserve destination content.
+    /// Copy entire file from source (default behavior).
     #[default]
-    Structured,
-    /// Copy entire file from source (override for special cases).
     WholeFile,
+    /// Use structured version updates, preserve destination content.
+    Structured,
 }
 
 impl std::fmt::Display for VersionHandling {
