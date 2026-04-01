@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.5.0](https://github.com/forkline/prl/tree/v0.5.0) - 2026-04-01
+
+### Changed
+
+- Default `version_handling` for version-managed files now uses `whole_file`, making full-file promotion the default behavior unless a component opts into `structured`
+
 ## [v0.4.1](https://github.com/forkline/prl/tree/v0.4.1) - 2026-03-30
 
 ### Added
@@ -21,17 +27,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Update logo ([a384e5c](https://github.com/forkline/prl/commit/a384e5ce8e00b22f6a56b7566425a70aecc77b4b))
 - Change logo width to 500 ([910a017](https://github.com/forkline/prl/commit/910a017c10693d9e497c7f65a270b6c5a34bdc1b))
-
-## [Unreleased]
-
-### Added
-
-- Structured version updates for single-source promotions - version-managed files (kustomization.yaml, Chart.yaml, values.yaml) now use structured updates that preserve destination-specific content while updating versions
-- `version_handling` option in component rules to override structured update behavior (`whole_file` to force wholesale copy)
-
-### Changed
-
-- Version-managed files in single-source promotions are no longer wholesale copied; only version fields are updated from source, preserving destination configuration
 
 ## [v0.3.1](https://github.com/forkline/prl/tree/v0.3.1) - 2026-03-27
 
