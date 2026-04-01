@@ -1389,7 +1389,48 @@ fn test_multi_source_preserve_rule_keeps_destination_env_values() {
 #[test]
 fn test_multi_source_conflicting_values_is_version_merged() {
     let repo = TestRepo::new();
-    repo.create_multi_source_config();
+
+    // Create config with version_handling: structured for version merging
+    let config = r#"
+version: 1
+
+repos:
+  test:
+    path: .
+    environments:
+      staging-a:
+        path: staging-a
+      staging-b:
+        path: staging-b
+      production:
+        path: production
+
+default_repo: test
+
+protected_dirs:
+  - custom
+  - env
+  - local
+
+allowlist:
+  - "**/*.yaml"
+
+rules:
+  components:
+    platform/api:
+      version_handling: structured
+  conflict_resolution:
+    config_strategy: source_priority
+    source_order:
+      - staging-b
+      - staging-a
+
+git:
+  require_clean_tree: false
+"#;
+    fs::write(&repo.config_path, config).expect("Failed to write config");
+    fs::create_dir_all(repo.repo_path.join("staging-a")).expect("Failed to create staging-a");
+    fs::create_dir_all(repo.repo_path.join("staging-b")).expect("Failed to create staging-b");
 
     repo.write_env_file(
         "production",
@@ -1456,7 +1497,49 @@ fn test_multi_source_identical_files_are_not_copied() {
 #[test]
 fn test_multi_source_consecutive_runs_create_unique_snapshot_ids() {
     let repo = TestRepo::new();
-    repo.create_multi_source_config();
+
+    // Create config with version_handling: structured for kustomization.yaml
+    // to avoid review artifact on conflicting files
+    let config = r#"
+version: 1
+
+repos:
+  test:
+    path: .
+    environments:
+      staging-a:
+        path: staging-a
+      staging-b:
+        path: staging-b
+      production:
+        path: production
+
+default_repo: test
+
+protected_dirs:
+  - custom
+  - env
+  - local
+
+allowlist:
+  - "**/*.yaml"
+
+rules:
+  components:
+    platform/api:
+      version_handling: structured
+  conflict_resolution:
+    config_strategy: source_priority
+    source_order:
+      - staging-b
+      - staging-a
+
+git:
+  require_clean_tree: false
+"#;
+    fs::write(&repo.config_path, config).expect("Failed to write config");
+    fs::create_dir_all(repo.repo_path.join("staging-a")).expect("Failed to create staging-a");
+    fs::create_dir_all(repo.repo_path.join("staging-b")).expect("Failed to create staging-b");
 
     repo.write_env_file(
         "production",
@@ -1534,6 +1617,20 @@ fn test_multi_source_consecutive_runs_create_unique_snapshot_ids() {
 fn test_realistic_gitops_workflow_version_merges_conflicting_values() {
     let repo = TestRepo::new();
     repo.create_realistic_gitops_config();
+
+    // Add version_handling: structured for platform/api to enable version merging
+    // Insert after the last component entry (apps/home-assistant) inside the components block
+    let mut config = fs::read_to_string(&repo.config_path).expect("Failed to read config");
+    let insert = r#"
+    platform/api:
+      version_handling: structured
+"#;
+    // Find "apps/home-assistant" entry and insert after its notes line
+    if let Some(pos) = config.find("\"Homelab specific - not for nbg1-c01\"") {
+        let end_pos = pos + "\"Homelab specific - not for nbg1-c01\"".len();
+        config.insert_str(end_pos, insert);
+    }
+    fs::write(&repo.config_path, config).expect("Failed to update config");
 
     repo.write_env_file(
         "nbg1-c01",
@@ -1860,7 +1957,39 @@ fn test_overwrite_same_content_no_change() {
 #[test]
 fn test_single_source_kustomization_yaml_uses_structured_version_update() {
     let repo = TestRepo::new();
-    repo.create_config();
+
+    // Create config with version_handling: structured for this component
+    let config = r#"
+version: 1
+
+repos:
+  test:
+    path: .
+    environments:
+      staging:
+        path: staging
+      production:
+        path: production
+
+default_repo: test
+
+protected_dirs:
+  - custom
+  - env
+  - local
+
+allowlist:
+  - "**/*.yaml"
+
+rules:
+  components:
+    platform/monitoring:
+      version_handling: structured
+
+git:
+  require_clean_tree: false
+"#;
+    fs::write(&repo.config_path, config).expect("Failed to write config");
 
     // Destination has kustomization.yaml with version 1.0.0 and env-specific resources
     repo.write_production_file(
@@ -1892,7 +2021,7 @@ resources:
         repo.run_prl(&["promote", "--source", "staging", "--dest", "production"]);
 
     assert!(success, "{}", stdout);
-    // Version-managed files use structured updates
+    // Version-managed files use structured updates when configured
     assert!(
         stdout.contains("versions updated"),
         "Expected version update message in stdout: {}",
@@ -1923,7 +2052,39 @@ resources:
 #[test]
 fn test_single_source_chart_yaml_uses_structured_version_update() {
     let repo = TestRepo::new();
-    repo.create_config();
+
+    // Create config with version_handling: structured for this component
+    let config = r#"
+version: 1
+
+repos:
+  test:
+    path: .
+    environments:
+      staging:
+        path: staging
+      production:
+        path: production
+
+default_repo: test
+
+protected_dirs:
+  - custom
+  - env
+  - local
+
+allowlist:
+  - "**/*.yaml"
+
+rules:
+  components:
+    apps/myapp:
+      version_handling: structured
+
+git:
+  require_clean_tree: false
+"#;
+    fs::write(&repo.config_path, config).expect("Failed to write config");
 
     // Destination has Chart.yaml with version 1.0.0 and env-specific config
     repo.write_production_file(
@@ -1956,7 +2117,7 @@ dependencies:
         repo.run_prl(&["promote", "--source", "staging", "--dest", "production"]);
 
     assert!(success, "{}", stdout);
-    // Version-managed files use structured updates
+    // Version-managed files use structured updates when configured
     assert!(
         stdout.contains("versions updated"),
         "Expected version update message in stdout: {}",
@@ -1974,10 +2135,11 @@ dependencies:
 }
 
 #[test]
-fn test_version_handling_whole_file_override() {
+fn test_version_handling_structured_override() {
     let repo = TestRepo::new();
 
-    // Create config with version_handling override
+    // Create config with version_handling: structured override
+    // Default is whole_file, but we want structured updates for this component
     let config = r#"
 version: 1
 
@@ -2003,7 +2165,7 @@ rules:
   components:
     platform/monitoring:
       action: always
-      version_handling: whole_file
+      version_handling: structured
 
 git:
   require_clean_tree: false
@@ -2037,8 +2199,13 @@ resources:
         repo.run_prl(&["promote", "--source", "staging", "--dest", "production"]);
 
     assert!(success, "{}", stdout);
+    // With structured override, only version should be updated
+    assert!(
+        stdout.contains("versions updated"),
+        "Expected version update message in stdout: {}",
+        stdout
+    );
 
-    // With whole_file override, entire file should be copied
     let result = repo
         .read_production_file("platform/monitoring/kustomization.yaml")
         .expect("File should exist");
@@ -2048,19 +2215,19 @@ resources:
         result
     );
     assert!(
-        result.contains("resources/homelab-specific.yaml"),
-        "Source resources should be copied with whole_file: {}",
+        result.contains("resources/etcd-secrets-updater.yaml"),
+        "Destination resources should be preserved with structured: {}",
         result
     );
     assert!(
-        !result.contains("resources/etcd-secrets-updater.yaml"),
-        "Destination resources should be replaced with whole_file: {}",
+        !result.contains("resources/homelab-specific.yaml"),
+        "Source resources should NOT be copied with structured: {}",
         result
     );
 }
 
 #[test]
-fn test_single_source_values_yaml_uses_structured_version_update() {
+fn test_single_source_values_yaml_uses_whole_file_by_default() {
     let repo = TestRepo::new();
     repo.create_config();
 
@@ -2095,10 +2262,10 @@ ingress:
         repo.run_prl(&["promote", "--source", "staging", "--dest", "production"]);
 
     assert!(success, "{}", stdout);
-    // Version-managed files use structured updates
+    // Default is whole_file, entire file is copied
     assert!(
-        stdout.contains("versions updated"),
-        "Expected version update message in stdout: {}",
+        stdout.contains("Copied"),
+        "Expected copied message in stdout: {}",
         stdout
     );
 
@@ -2110,14 +2277,15 @@ ingress:
         "Image tag should be updated: {}",
         result
     );
+    // With whole_file default, source ingress should be copied
     assert!(
-        result.contains("api.prod.example.com"),
-        "Destination ingress host should be preserved: {}",
+        result.contains("api.staging.example.com"),
+        "Source ingress host should be copied with whole_file default: {}",
         result
     );
     assert!(
-        !result.contains("api.staging.example.com"),
-        "Source ingress host should NOT be copied: {}",
+        !result.contains("api.prod.example.com"),
+        "Destination ingress host should be replaced with whole_file default: {}",
         result
     );
 }
