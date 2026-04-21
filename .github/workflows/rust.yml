@@ -50,7 +50,7 @@ jobs:
       - run: rustup override set ${{steps.toolchain.outputs.name}}
       - run: rustup component add clippy
 
-      - uses: clechasseur/rs-clippy-check@v5
+      - uses: clechasseur/rs-clippy-check@v6.0.2
         with:
           args: --all-features -- --deny warnings
 
@@ -84,11 +84,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          target: ${{ matrix.job.target }}
-          override: true
+          targets: ${{ matrix.job.target }}
 
       - name: Build
         run: cargo build --verbose --target ${{ matrix.job.target }}
