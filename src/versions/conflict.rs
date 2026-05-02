@@ -421,10 +421,11 @@ mod tests {
         check_component_conflicts("system/loki", &source, &dest, &mut conflicts);
 
         // Should detect repository change
-        assert!(conflicts.iter().any(|c| matches!(
-            &c.kind,
-            ConflictKind::RepositoryChange { .. }
-        )));
+        assert!(
+            conflicts
+                .iter()
+                .any(|c| matches!(&c.kind, ConflictKind::RepositoryChange { .. }))
+        );
 
         let repo_conflict = conflicts
             .iter()
@@ -510,10 +511,11 @@ mod tests {
         check_component_conflicts("system/loki", &source, &dest, &mut conflicts);
 
         // Should detect registry change when core paths match (grafana/loki)
-        assert!(conflicts.iter().any(|c| matches!(
-            &c.kind,
-            ConflictKind::RegistryChange { .. }
-        )));
+        assert!(
+            conflicts
+                .iter()
+                .any(|c| matches!(&c.kind, ConflictKind::RegistryChange { .. }))
+        );
 
         let registry_conflict = conflicts
             .iter()
