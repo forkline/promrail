@@ -90,22 +90,21 @@ fn check_component_conflicts(
             // Check for repository change first
             if let (Some(src_repo), Some(dest_repo)) =
                 (&src_chart.repository, &dest_chart.repository)
+                && !repositories_equal(src_repo, dest_repo)
             {
-                if !repositories_equal(src_repo, dest_repo) {
-                    conflicts.push(Conflict {
-                        component: component.to_string(),
-                        file: src_chart.source_file.clone(),
-                        kind: ConflictKind::RepositoryChange {
-                            chart_name: src_chart.name.clone(),
-                            from_repo: dest_repo.clone(),
-                            to_repo: src_repo.clone(),
-                        },
-                        details: format!(
-                            "Repository change for {}: {} -> {}",
-                            src_chart.name, dest_repo, src_repo
-                        ),
-                    });
-                }
+                conflicts.push(Conflict {
+                    component: component.to_string(),
+                    file: src_chart.source_file.clone(),
+                    kind: ConflictKind::RepositoryChange {
+                        chart_name: src_chart.name.clone(),
+                        from_repo: dest_repo.clone(),
+                        to_repo: src_repo.clone(),
+                    },
+                    details: format!(
+                        "Repository change for {}: {} -> {}",
+                        src_chart.name, dest_repo, src_repo
+                    ),
+                });
             }
 
             // Check for version downgrade
