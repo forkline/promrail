@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.6.0](https://github.com/forkline/prl/tree/v0.6.0) - 2026-05-02
+
+### Added
+
+- Add source change detection for Helm charts and container images ([c863aa4](https://github.com/forkline/prl/commit/c863aa4))
+
 ## [v0.5.0](https://github.com/forkline/prl/tree/v0.5.0) - 2026-04-01
 
 ### Changed
