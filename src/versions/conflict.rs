@@ -394,7 +394,7 @@ mod tests {
 
     #[test]
     fn test_repository_change_detection() {
-        use crate::versions::models::{HelmChartVersion, ContainerImageVersion};
+        use crate::versions::models::HelmChartVersion;
 
         let source = ComponentVersions {
             path: "system/loki".to_string(),
