@@ -109,6 +109,16 @@ pub enum ConflictKind {
     },
     MissingInDest,
     MissingInSource,
+    RepositoryChange {
+        chart_name: String,
+        from_repo: String,
+        to_repo: String,
+    },
+    RegistryChange {
+        image_name: String,
+        from_registry: String,
+        to_registry: String,
+    },
 }
 
 // =============================================================================

@@ -5,8 +5,9 @@ use std::process::Command;
 
 use log::{info, warn};
 
+use crate::config::PromotionRules;
 use crate::error::AppResult;
-use crate::versions::conflict::detect_conflicts;
+use crate::versions::conflict::{detect_conflicts, filter_source_change_conflicts};
 use crate::versions::models::{
     ApplyOptions, ApplyResult, FileVersionChange, Snapshot, VersionChangeKind,
     VersionChangeSummary, VersionReport,
@@ -19,12 +20,31 @@ pub fn apply_versions(
     dest: &Path,
     options: &ApplyOptions,
 ) -> AppResult<ApplyResult> {
+    apply_versions_with_rules(report, dest, options, None)
+}
+
+/// Apply versions from a report to a destination repository with optional rules.
+pub fn apply_versions_with_rules(
+    report: &VersionReport,
+    dest: &Path,
+    options: &ApplyOptions,
+    rules: Option<&PromotionRules>,
+) -> AppResult<ApplyResult> {
     let mut result = ApplyResult::default();
 
     // Check conflicts if requested
     if options.check_conflicts && !options.dry_run {
         let dest_report = super::extract::extract_versions(dest, &[])?;
-        result.conflicts = detect_conflicts(report, &dest_report);
+        let raw_conflicts = detect_conflicts(report, &dest_report);
+
+        // Filter conflicts based on rules if provided
+        let (conflicts, has_blocking) = if let Some(rules) = rules {
+            filter_source_change_conflicts(raw_conflicts, rules)
+        } else {
+            (raw_conflicts, false)
+        };
+
+        result.conflicts = conflicts;
 
         if !result.conflicts.is_empty() {
             warn!("Conflicts detected!");
@@ -33,6 +53,10 @@ pub fn apply_versions(
                     "  {} in {}: {}",
                     conflict.component, conflict.file, conflict.details
                 );
+            }
+            // Block if there are blocking conflicts
+            if has_blocking {
+                warn!("Source change conflicts block promotion. Check your rules configuration.");
             }
             return Ok(result);
         }

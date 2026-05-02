@@ -235,6 +235,32 @@ impl std::fmt::Display for VersionHandling {
     }
 }
 
+/// Source change handling strategy for dependency source changes.
+#[derive(Debug, Deserialize, Clone, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum SourceChangeHandling {
+    /// Log warning, continue promotion.
+    #[default]
+    Warn,
+    /// Flag for human review (block in strict mode).
+    Review,
+    /// Block promotion entirely.
+    Block,
+    /// Silently proceed (user explicitly opted out).
+    Ignore,
+}
+
+impl std::fmt::Display for SourceChangeHandling {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SourceChangeHandling::Warn => write!(f, "warn"),
+            SourceChangeHandling::Review => write!(f, "review"),
+            SourceChangeHandling::Block => write!(f, "block"),
+            SourceChangeHandling::Ignore => write!(f, "ignore"),
+        }
+    }
+}
+
 /// Component-level promotion rule.
 #[derive(Debug, Deserialize, Clone, ConfigDoc)]
 pub struct ComponentRule {
@@ -254,6 +280,10 @@ pub struct ComponentRule {
     /// Override version-managed file handling strategy.
     #[serde(default)]
     pub version_handling: VersionHandling,
+
+    /// How to handle source changes (repository/registry changes).
+    #[serde(default)]
+    pub source_change_handling: SourceChangeHandling,
 }
 
 /// File-specific preserve rule for YAML/JSON promotion.
