@@ -158,8 +158,10 @@ impl Snapshot {
     pub fn new(source_path: String, dest_path: String, filters: Vec<String>) -> Self {
         let timestamp = time::OffsetDateTime::now_utc()
             .format(
-                &time::format_description::parse("[year][month][day][hour][minute][second]")
-                    .unwrap(),
+                &time::format_description::parse_borrowed::<2>(
+                    "[year][month][day][hour][minute][second]",
+                )
+                .unwrap(),
             )
             .unwrap_or_default();
 
