@@ -513,7 +513,9 @@ fn execute_multi_source(config: &Config, repo: &GitRepo, args: &PromoteArgs) -> 
 
     let snapshot_id = create_multi_source_snapshot(
         &dest_path,
-        Some(review_path.as_path()).filter(|_| applied_review_artifact.is_some()),
+        applied_review_artifact
+            .is_some()
+            .then_some(review_path.as_path()),
     )?;
     info!("Created snapshot: {}", snapshot_id);
 
