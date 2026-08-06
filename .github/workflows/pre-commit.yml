@@ -17,6 +17,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: pre-commit-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   pre-commit:
