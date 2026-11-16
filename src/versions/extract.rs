@@ -79,14 +79,9 @@ fn should_skip_file(path: &str) -> bool {
     let normalized = path.replace('\\', "/");
     let segments: Vec<&str> = normalized.split('/').collect();
 
-    if segments
+    segments
         .iter()
         .any(|segment| matches!(*segment, "custom" | "test" | "tests" | "templates"))
-    {
-        return true;
-    }
-
-    false
 }
 
 /// Get component path (parent directory of the file).
